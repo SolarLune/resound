@@ -99,15 +99,15 @@ func main() {
 
 ## What effects are implemented?
 
-[x] Volume
-[x] Pan
-[x] Delay
-[x] Distortion
-[x] Low-pass Filter
-[ ] High-pass Filter
-[ ] Reverb
-[ ] Mix
-[ ] Fade
-[ ] Loop
-[ ] Auto-stream lengthening for delays / reverbs / effects that make the stream longer (fundamentally, the way this works is by altering the input stream; if the stream ends, then the effect also ends, which may or may not be what you want.)
-... And whatever else may be necessary.
+- [X] Volume
+- [X] Pan
+- [X] Delay
+- [X] Distortion
+- [X] Low-pass Filter
+- [ ] High-pass Filter
+- [ ] Reverb
+- [ ] Mix
+- [ ] Fade
+- [ ] Loop
+- [ ] Auto-stream lengthening for delays / reverbs / effects that make the stream longer (fundamentally, the way this works is by altering the input stream; if the stream ends, then the effect also ends, which may or may not be what you want.)
+  ... And whatever else may be necessary.
