@@ -8,6 +8,8 @@ import (
 	"github.com/tanema/gween/ease"
 )
 
+// IEffect indicates an effect that implements io.ReadSeeker, as well as
+// can do other things.
 type IEffect interface {
 	io.ReadSeeker
 	applyEffect(data []byte)
@@ -22,6 +24,12 @@ type Volume struct {
 	Source  io.ReadSeeker
 }
 
+// NewVolume creates a new Volume effect. source is the source stream to apply this
+// effect to, and percent is the percentage, ranging from 0 to 1, to indicate how
+// strongly the volume should be altered. You can over-amplify the sound by pushing
+// the volume above 1 - otherwise, the volume is altered on a sine-based easing curve.
+// If you add this effect to a DSPChannel, there's no need to pass a source, as
+// it will take effect for whatever streams are played through the DSPChannel.
 func NewVolume(source io.ReadSeeker, percent float64) *Volume {
 
 	if percent < 0 {
@@ -112,6 +120,11 @@ type Pan struct {
 	Source  io.ReadSeeker
 }
 
+// NewPan creates a new Pan effect. source is the source stream to apply the
+// effect on, and the percent is the percentage, ranging from -1 (left channel only),
+// to 1 (right channel only) the pan should take effect over.
+// If you add this effect to a DSPChannel, there's no need to pass a source, as
+// it will take effect for whatever streams are played through the DSPChannel.
 func NewPan(source io.ReadSeeker, percent float64) *Pan {
 
 	if percent < -1 {
@@ -201,6 +214,12 @@ type Delay struct {
 	buffer [][2]int16
 }
 
+// NewDelay creates a new Delay effect. The first and second
+// arguments are how many seconds should pass between the initial sound and
+// the delay, and how loud (in percentage) the delay should be. The last argument,
+// feedbackLoop, is if the delay should feedback into itself.
+// If you add this effect to a DSPChannel, there's no need to pass a source, as
+// it will take effect for whatever streams are played through the DSPChannel.
 func NewDelay(source io.ReadSeeker, delayWait, delayStrength float64, feedbackLoop bool) *Delay {
 
 	return &Delay{
@@ -214,6 +233,7 @@ func NewDelay(source io.ReadSeeker, delayWait, delayStrength float64, feedbackLo
 
 }
 
+// Clone creates a clone of the Delay effect.
 func (delay *Delay) Clone() IEffect {
 	return &Delay{
 		Wait:         delay.Wait,
@@ -302,11 +322,16 @@ type Distort struct {
 	active     bool
 }
 
-func NewDistort(source io.ReadSeeker, distortAmount float64) *Distort {
+// NewDistort creates a new Distort effect. source is the source stream to
+// apply the effect to, and the percent is a percentage ranging from 0
+// to 1 indicating how strongly the distortion should be.
+// If you add this effect to a DSPChannel, you can pass nil as the source, as
+// it will take effect for whatever streams are played through the DSPChannel.
+func NewDistort(source io.ReadSeeker, percent float64) *Distort {
 
 	return &Distort{
 		Source:     source,
-		Percentage: distortAmount,
+		Percentage: percent,
 		active:     true,
 	}
 
@@ -385,6 +410,11 @@ type LowpassFilter struct {
 	prevRight  float64
 }
 
+// NewLowpassFilter creates a new low-pass filter for the given source stream.
+// filterPercentage, ranging from 0 (un-filtered) to 1 (fully filtered), indicates
+// how strongly the stream should be filtered.
+// If you add this effect to a DSPChannel, there's no need to pass a source, as
+// it will take effect for whatever streams are played through the DSPChannel.
 func NewLowpassFilter(source io.ReadSeeker, filterPercentage float64) *LowpassFilter {
 
 	return &LowpassFilter{
