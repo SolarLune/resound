@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"time"
 
 	_ "embed"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
 	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
@@ -44,28 +46,28 @@ func NewGame() *Game {
 	// Now we add effects; we don't have to specify a stream because a DSPChannel applies them
 	// to all streams played through the channel.
 
-	game.DSP.Add("delay", resound.NewDelay(nil, 0.1, 1, true))
+	game.DSP.Add("delay", resound.NewDelay(nil, 0.1, 0.9, false))
 	game.DSP.Add("pan", resound.NewPan(nil, 0))
 	game.DSP.Add("volume", resound.NewVolume(nil, 1))
 
-	// reader := bytes.NewReader(songData)
+	reader := bytes.NewReader(songData)
 
-	// stream, err := vorbis.DecodeWithSampleRate(sampleRate, reader)
+	stream, err := vorbis.DecodeWithSampleRate(sampleRate, reader)
 
-	// if err != nil {
-	// 	panic(err)
-	// }
+	if err != nil {
+		panic(err)
+	}
 
-	// loop := audio.NewInfiniteLoop(stream, stream.Length())
+	loop := audio.NewInfiniteLoop(stream, stream.Length())
 
 	// I want to make the music quieter, so I'll actually add a volume
 	// effect in the middle of this
 
-	// volume := resound.NewVolume(loop, 0.1)
+	volume := resound.NewVolume(loop, 0.25)
 
-	// player := game.DSP.CreatePlayer(volume)
-	// player.SetBufferSize(time.Millisecond * 50)
-	// player.Play()
+	player := game.DSP.CreatePlayer(volume)
+	player.SetBufferSize(time.Millisecond * 50)
+	player.Play()
 
 	return game
 }
