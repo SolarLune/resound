@@ -21,7 +21,7 @@ func newChannelPlayback(sourceStream io.ReadSeeker, channel *DSPChannel) *DSPPla
 		Source:  sourceStream,
 	}
 
-	player, err := channel.Context.NewPlayer(cp)
+	player, err := audio.CurrentContext().NewPlayer(cp)
 
 	if err != nil {
 		panic(err)
@@ -51,7 +51,7 @@ func (es *DSPPlayer) Read(p []byte) (n int, err error) {
 		effect.applyEffect(p)
 	}
 
-	return len(p), nil
+	return n, nil
 
 }
 
@@ -67,16 +67,14 @@ func (es *DSPPlayer) Seek(offset int64, whence int) (int64, error) {
 
 // DSPChannel represents a channel that can have various effects applied to it.
 type DSPChannel struct {
-	Context     *audio.Context
 	Active      bool
 	Effects     map[string]IEffect
 	EffectOrder []IEffect
 }
 
 // NewDSPChannel returns a new DSPChannel.
-func NewDSPChannel(context *audio.Context) *DSPChannel {
+func NewDSPChannel() *DSPChannel {
 	dsp := &DSPChannel{
-		Context:     context,
 		Active:      true,
 		Effects:     map[string]IEffect{},
 		EffectOrder: []IEffect{},
@@ -86,9 +84,10 @@ func NewDSPChannel(context *audio.Context) *DSPChannel {
 
 // Add adds the specified Effect to the DSPChannel under the given name. Note that effects added to DSPChannels don't need
 // to specify source streams, as the DSPChannel automatically handles this.
-func (dsp *DSPChannel) Add(name string, effect IEffect) {
+func (dsp *DSPChannel) Add(name string, effect IEffect) *DSPChannel {
 	dsp.Effects[name] = effect
 	dsp.EffectOrder = append(dsp.EffectOrder, effect)
+	return dsp
 }
 
 // CreatePlayer creates a new DSPPlayer to handle playback of a stream through the DSPChannel.

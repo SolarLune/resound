@@ -34,13 +34,12 @@ const sampleRate = 44100
 
 func NewGame() *Game {
 
-	context := audio.NewContext(sampleRate)
+	// We create a new audio context using the provided sample rate.
+	audio.NewContext(sampleRate)
 
+	// We then create a new DSP Channel. It will use the global audio context we just made.
 	game := &Game{
-
-		DSP: resound.NewDSPChannel(
-			context,
-		),
+		DSP: resound.NewDSPChannel(),
 	}
 
 	// Now we add effects; we don't have to specify a stream because a DSPChannel applies them

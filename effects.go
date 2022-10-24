@@ -57,7 +57,7 @@ func (volume *Volume) Read(p []byte) (n int, err error) {
 
 	volume.applyEffect(p)
 
-	return len(p), nil
+	return n, nil
 
 }
 
@@ -317,9 +317,9 @@ func (delay *Delay) Active() bool {
 }
 
 type Distort struct {
-	Percentage float64
-	Source     io.ReadSeeker
-	active     bool
+	Percent float64
+	Source  io.ReadSeeker
+	active  bool
 }
 
 // NewDistort creates a new Distort effect. source is the source stream to
@@ -330,18 +330,18 @@ type Distort struct {
 func NewDistort(source io.ReadSeeker, percent float64) *Distort {
 
 	return &Distort{
-		Source:     source,
-		Percentage: percent,
-		active:     true,
+		Source:  source,
+		Percent: percent,
+		active:  true,
 	}
 
 }
 
 func (distort *Distort) Clone() IEffect {
 	return &Distort{
-		Percentage: distort.Percentage,
-		Source:     distort.Source,
-		active:     distort.active,
+		Percent: distort.Percent,
+		Source:  distort.Source,
+		active:  distort.active,
 	}
 }
 
@@ -364,7 +364,7 @@ func (distort *Distort) applyEffect(p []byte) {
 		return
 	}
 
-	clipMax := float64(math.MaxInt16) * distort.Percentage
+	clipMax := float64(math.MaxInt16) * distort.Percent
 
 	if clipMax < 1 {
 		clipMax = 1
@@ -403,11 +403,11 @@ func (distort *Distort) Active() bool {
 }
 
 type LowpassFilter struct {
-	Percentage float64
-	Source     io.ReadSeeker
-	active     bool
-	prevLeft   float64
-	prevRight  float64
+	Percent   float64
+	Source    io.ReadSeeker
+	active    bool
+	prevLeft  float64
+	prevRight float64
 }
 
 // NewLowpassFilter creates a new low-pass filter for the given source stream.
@@ -418,18 +418,18 @@ type LowpassFilter struct {
 func NewLowpassFilter(source io.ReadSeeker, filterPercentage float64) *LowpassFilter {
 
 	return &LowpassFilter{
-		Source:     source,
-		Percentage: filterPercentage,
-		active:     true,
+		Source:  source,
+		Percent: filterPercentage,
+		active:  true,
 	}
 
 }
 
 func (lpf *LowpassFilter) Clone() IEffect {
 	return &LowpassFilter{
-		Percentage: lpf.Percentage,
-		Source:     lpf.Source,
-		active:     lpf.active,
+		Percent: lpf.Percent,
+		Source:  lpf.Source,
+		active:  lpf.active,
 	}
 }
 
@@ -452,7 +452,7 @@ func (lpf *LowpassFilter) applyEffect(p []byte) {
 		return
 	}
 
-	alpha := math.Sin(lpf.Percentage * math.Pi / 2)
+	alpha := math.Sin(lpf.Percent * math.Pi / 2)
 
 	for i := 0; i < len(p); i += 4 {
 
