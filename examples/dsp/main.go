@@ -78,21 +78,29 @@ func (game *Game) Update() error {
 	pan := game.DSP.Effects["pan"].(*resound.Pan)
 	volume := game.DSP.Effects["volume"].(*resound.Volume)
 
+	panFactor := pan.Pan()
+
 	if ebiten.IsKeyPressed(ebiten.KeyRight) {
-		pan.Percent += 0.01
+		panFactor += 0.02
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
-		pan.Percent -= 0.01
+		panFactor -= 0.02
 	}
 
+	pan.SetPan(panFactor)
+
+	volumeStrength := volume.Strength()
+
 	if ebiten.IsKeyPressed(ebiten.KeyUp) {
-		volume.Percent += 0.01
+		volumeStrength += 0.02
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyDown) {
-		volume.Percent -= 0.01
+		volumeStrength -= 0.02
 	}
+
+	volume.SetStrength(volumeStrength)
 
 	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 
@@ -105,21 +113,6 @@ func (game *Game) Update() error {
 		game.DSP.CreatePlayer(stream).Play()
 
 	}
-
-	if pan.Percent > 1 {
-		pan.Percent = 1
-	}
-
-	if pan.Percent < -1 {
-		pan.Percent = -1
-	}
-
-	// game.Pan.Percent += 0.01
-	// if game.Pan.Percent > 1 {
-	// 	game.Pan.Percent = -1
-	// }
-
-	// fmt.Println(game.Pan.Percent)
 
 	game.Time += 1.0 / 60.0
 
@@ -134,7 +127,7 @@ func (game *Game) Draw(screen *ebiten.Image) {
 
 	pan := game.DSP.Effects["pan"].(*resound.Pan)
 	volume := game.DSP.Effects["volume"].(*resound.Volume)
-	text.Draw(screen, fmt.Sprintf("This is an example showing how\nDSPChannels work. You create a\nDSPChannel, add effects, and play streams\nthrough it to share the effects.\n\nIn this example, left and right arrow keys\nalter the pan. Up and down alters the\nvolume. Press space to play a footstep\nsound through the channel.\n\nPan level: %.2f\nVolume level: %.2f", pan.Percent, volume.Percent), basicfont.Face7x13, 16, 16, color.White)
+	text.Draw(screen, fmt.Sprintf("This is an example showing how\nDSPChannels work. You create a\nDSPChannel, add effects, and play streams\nthrough it to share the effects.\n\nIn this example, left and right arrow keys\nalter the pan. Up and down alters the\nvolume. Press space to play a footstep\nsound through the channel.\n\nPan level: %.2f\nVolume level: %.2f", pan.Pan(), volume.Strength()), basicfont.Face7x13, 16, 16, color.White)
 
 }
 

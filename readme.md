@@ -120,7 +120,7 @@ func main() {
 - [ ] Reverb
 - [ ] Mix
 - [ ] Fade
-- [ ] Loop
+- [ ] Loop (like, looping a signal after so much time)
 
   ... And whatever else may be necessary.
 
