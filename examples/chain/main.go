@@ -41,10 +41,16 @@ func NewGame() *Game {
 
 	loop := audio.NewInfiniteLoop(stream, stream.Length())
 
-	delay := resound.NewDelay(loop, 0.1, 0.9, true)
-	filter := resound.NewLowpassFilter(delay, 0.9)
+	// Here, we want to chain effects together, so this utility function can be used
+	// to make it simpler.
 
-	player, err := context.NewPlayer(filter)
+	sfx := resound.ChainEffects(
+		resound.NewDelay(loop).SetWait(0.15).SetStrength(0.75).SetFeedbackLoop(true),
+		resound.NewPan(nil).SetPan(0.75),
+		resound.NewLowpassFilter(nil).SetStrength(0.9),
+	)
+
+	player, err := context.NewPlayer(sfx)
 
 	// Change the buffer size so that we can have some responsiveness
 	// when we change effect parameters on the fly
@@ -74,7 +80,7 @@ func (game *Game) Update() error {
 
 func (game *Game) Draw(screen *ebiten.Image) {
 
-	text.Draw(screen, "This is another simple example showing how\neffects can be chained. In this example,\na delay effect is chained into\na lowpass filter.", basicfont.Face7x13, 16, 16, color.White)
+	text.Draw(screen, "This is another simple example showing how\neffects can be chained. In this example,\na delay effect is chained into\na pan filter, which is chained into\na lowpass filter.", basicfont.Face7x13, 16, 16, color.White)
 
 }
 

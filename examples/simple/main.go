@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image/color"
 	"time"
 
@@ -18,8 +19,9 @@ import (
 )
 
 type Game struct {
-	Delay *resound.Delay
-	Time  float64
+	Bitcrush *resound.Bitcrush
+	Delay    *resound.Delay
+	Time     float64
 }
 
 //go:embed encouragement.ogg
@@ -43,7 +45,10 @@ func NewGame() *Game {
 
 	loop := audio.NewInfiniteLoop(stream, stream.Length())
 
-	game.Delay = resound.NewDelay(loop, 0.1, 0.5, false)
+	game.Bitcrush = resound.NewBitcrush(loop).SetStrength(0.4)
+	// volume := resound.NewVolume(loop).SetStrength(0.5)
+
+	game.Delay = resound.NewDelay(game.Bitcrush).SetStrength(0.75)
 
 	player, err := context.NewPlayer(game.Delay)
 
@@ -67,6 +72,15 @@ func (game *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
 		game.Delay.SetActive(!game.Delay.Active())
 	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyRight) {
+		game.Bitcrush.SetStrength(game.Bitcrush.Strength() + 0.025)
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
+		game.Bitcrush.SetStrength(game.Bitcrush.Strength() - 0.025)
+	}
+
+	fmt.Println(game.Bitcrush)
 
 	game.Time += 1.0 / 60.0
 

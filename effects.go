@@ -1,6 +1,7 @@
 package resound
 
 import (
+	"fmt"
 	"io"
 	"math"
 
@@ -8,14 +9,44 @@ import (
 	"github.com/tanema/gween/ease"
 )
 
+// audioBuffer wraps a []byte of audio data and provides handy functions to get
+// and set values for volume.
+type audioBuffer []byte
+
+func (ab audioBuffer) Len() int {
+	return len(ab) / 4
+}
+
+func (ab audioBuffer) Get(i int) (l, r float64) {
+	lc := float64(int16(ab[i*4]) | int16(ab[i*4+1])<<8)
+	rc := float64(int16(ab[i*4+2]) | int16(ab[i*4+3])<<8)
+	lc /= math.MaxInt16
+	rc /= math.MaxInt16
+	return lc, rc
+}
+
+func (ab audioBuffer) Set(i int, l, r float64) {
+
+	max := float64(math.MaxInt16)
+
+	l = clamp(l*math.MaxInt16, -max, max)
+	r = clamp(r*math.MaxInt16, -max, max)
+
+	lcc := int16(l)
+	rcc := int16(r)
+
+	ab[(i * 4)] = byte(lcc)
+	ab[(i*4)+1] = byte(lcc >> 8)
+	ab[(i*4)+2] = byte(rcc)
+	ab[(i*4)+3] = byte(rcc >> 8)
+}
+
 // IEffect indicates an effect that implements io.ReadSeeker and generally takes effect on an existing audio stream.
 // It represents the result of applying an effect to an audio stream, and is playable in its own right.
 type IEffect interface {
 	io.ReadSeeker
 	applyEffect(data []byte)
-	Active() bool          // Active returns if the IEffect is active or not. When inactive, it applies no effect to the incoming audio stream.
-	SetActive(active bool) // SetActive sets the Effect's active state.
-	Clone() IEffect        // Clone returns a clone of the IEffect.
+	setSource(io.ReadSeeker)
 }
 
 // Volume is an effect that changes the overall volume of the incoming audio byte stream.
@@ -25,19 +56,13 @@ type Volume struct {
 	Source   io.ReadSeeker
 }
 
-// NewVolume creates a new Volume effect. source is the source stream to apply this
-// effect to, and percent is the strength percentage, ranging from 0 to 1, to indicate how
-// strongly the volume should be altered. You can over-amplify the sound by pushing
-// the volume above 1 - otherwise, the volume is altered on a sine-based easing curve.
-// If you add this effect to a DSPChannel, there's no need to pass a source, as
-// it will take effect for whatever streams are played through the DSPChannel.
-func NewVolume(source io.ReadSeeker, strength float64) *Volume {
+// NewVolume creates a new Volume effect. source is the source stream to apply this effect to.
+// If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
+// streams are played through the DSPChannel.
+func NewVolume(source io.ReadSeeker) *Volume {
 
-	if strength < 0 {
-		strength = 0
-	}
-
-	return &Volume{Source: source, strength: strength, active: true}
+	volume := &Volume{Source: source, strength: 1, active: true}
+	return volume
 
 }
 
@@ -74,25 +99,16 @@ func (volume *Volume) applyEffect(p []byte) {
 		perc = float64(ease.InSine(float32(volume.strength), 0, 1, 1))
 	}
 
-	for i := 0; i < len(p); i += 4 {
-		lc := float64(int16(p[i])|int16(p[i+1])<<8) * perc
-		rc := float64(int16(p[i+2])|int16(p[i+3])<<8) * perc
+	audio := audioBuffer(p)
 
-		if lc > math.MaxInt16 {
-			lc = math.MaxInt16
-		}
+	for i := 0; i < audio.Len(); i++ {
 
-		if rc > math.MaxInt16 {
-			rc = math.MaxInt16
-		}
+		l, r := audio.Get(i)
 
-		lcc := int16(lc)
-		rcc := int16(rc)
+		l *= perc
+		r *= perc
 
-		p[i] = byte(lcc)
-		p[i+1] = byte(lcc >> 8)
-		p[i+2] = byte(rcc)
-		p[i+3] = byte(rcc >> 8)
+		audio.Set(i, l, r)
 	}
 
 }
@@ -114,19 +130,25 @@ func (volume *Volume) Active() bool {
 	return volume.active
 }
 
+// SetStrength sets the strength of the Volume effect to the specified percentage.
+// The lowest possible value is 0.0, with 1.0 taking a 100% effect.
+// The volume is altered on a sine-based easing curve.
+// At over 100% volume, the sound is clipped as necessary.
+func (volume *Volume) SetStrength(strength float64) *Volume {
+	if strength < 0 {
+		strength = 0
+	}
+	volume.strength = strength
+	return volume
+}
+
 // Strength returns the strength of the Volume effect as a percentage.
 func (volume *Volume) Strength() float64 {
 	return volume.strength
 }
 
-// SetStrength sets the strength of the Volume effect to the specified percentage.
-// The lowest possible value is 0.0, with 1.0 taking a 100% effect.
-// At over 100% volume, the sound is clipped as necessary.
-func (volume *Volume) SetStrength(strength float64) {
-	if strength < 0 {
-		strength = 0
-	}
-	volume.strength = strength
+func (volume *Volume) setSource(source io.ReadSeeker) {
+	volume.Source = source
 }
 
 // Pan is a panning effect, handling panning the sound between the left and right channels.
@@ -137,14 +159,12 @@ type Pan struct {
 }
 
 // NewPan creates a new Pan effect. source is the source stream to apply the
-// effect on, and panPercentage is the percentage of the panning effect in percentage,
-// ranging from -1 (left channel only), to 1 (right channel only) the pan should take effect over.
-// If you add this effect to a DSPChannel, there's no need to pass a source, as
-// it will take effect for whatever streams are played through the DSPChannel.
-func NewPan(source io.ReadSeeker, panPercentage float64) *Pan {
+// effect on. Panning defaults to 0.
+// If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
+// streams are played through the DSPChannel.
+func NewPan(source io.ReadSeeker) *Pan {
 
-	pan := &Pan{Source: source, strength: panPercentage, active: true}
-	pan.SetPan(panPercentage)
+	pan := &Pan{Source: source, active: true}
 	return pan
 
 }
@@ -190,14 +210,18 @@ func (pan *Pan) applyEffect(p []byte) {
 	// https://docs.unity3d.com/ScriptReference/AudioSource-panStereo.html
 	ls := math.Min(pan.strength*-1+1, 1)
 	rs := math.Min(pan.strength+1, 1)
-	for i := 0; i < len(p); i += 4 {
-		lc := int16(float64(int16(p[i])|int16(p[i+1])<<8) * ls)
-		rc := int16(float64(int16(p[i+2])|int16(p[i+3])<<8) * rs)
 
-		p[i] = byte(lc)
-		p[i+1] = byte(lc >> 8)
-		p[i+2] = byte(rc)
-		p[i+3] = byte(rc >> 8)
+	audio := audioBuffer(p)
+
+	for i := 0; i < audio.Len(); i++ {
+
+		l, r := audio.Get(i)
+
+		l *= ls
+		r *= rs
+
+		audio.Set(i, l, r)
+
 	}
 
 }
@@ -210,8 +234,9 @@ func (pan *Pan) Seek(offset int64, whence int) (int64, error) {
 }
 
 // SetActive sets the effect to be active.
-func (pan *Pan) SetActive(active bool) {
+func (pan *Pan) SetActive(active bool) *Pan {
 	pan.active = active
+	return pan
 }
 
 // Active returns if the effect is active.
@@ -219,20 +244,25 @@ func (pan *Pan) Active() bool {
 	return pan.active
 }
 
-// Pan returns the panning value for the pan effect in a percentage, ranging from -1 (hard left) to 1 (hard right).
-func (pan *Pan) Pan() float64 {
-	return pan.strength
-}
-
 // SetPan sets the panning percentage for the pan effect.
 // The possible values range from -1 (hard left) to 1 (hard right).
-func (pan *Pan) SetPan(panPercent float64) {
+func (pan *Pan) SetPan(panPercent float64) *Pan {
 	if panPercent > 1 {
 		panPercent = 1
 	} else if panPercent < -1 {
 		panPercent = -1
 	}
 	pan.strength = panPercent
+	return pan
+}
+
+// Pan returns the panning value for the pan effect in a percentage, ranging from -1 (hard left) to 1 (hard right).
+func (pan *Pan) Pan() float64 {
+	return pan.strength
+}
+
+func (pan *Pan) setSource(source io.ReadSeeker) {
+	pan.Source = source
 }
 
 // Delay is an effect that adds a delay to the sound.
@@ -243,23 +273,20 @@ type Delay struct {
 	Source       io.ReadSeeker
 
 	active bool
-	buffer [][2]int16
+	buffer [][2]float64
 }
 
-// NewDelay creates a new Delay effect. The first and second
-// arguments are how many seconds should pass between the initial sound and
-// the delay, and how loud (in percentage) the delay should be. The last argument,
-// feedbackLoop, is if the delay should feedback into itself.
-// If you add this effect to a DSPChannel, there's no need to pass a source, as
-// it will take effect for whatever streams are played through the DSPChannel.
-func NewDelay(source io.ReadSeeker, delayWait, delayStrength float64, feedbackLoop bool) *Delay {
+// NewDelay creates a new Delay effect.
+// If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
+// streams are played through the DSPChannel.
+func NewDelay(source io.ReadSeeker) *Delay {
 
 	return &Delay{
 		Source:       source,
-		wait:         delayWait,
-		strength:     delayStrength,
-		feedbackLoop: feedbackLoop,
-		buffer:       [][2]int16{},
+		wait:         0.1,
+		strength:     0.75,
+		feedbackLoop: false,
+		buffer:       [][2]float64{},
 		active:       true,
 	}
 
@@ -292,30 +319,30 @@ func (delay *Delay) Read(p []byte) (n int, err error) {
 
 func (delay *Delay) applyEffect(p []byte) {
 
-	if !delay.active {
-		return
-	}
-
 	sampleRate := audio.CurrentContext().SampleRate()
 
-	for i := 0; i < len(p); i += 4 {
-		lc := int16(p[i]) | int16(p[i+1])<<8
-		rc := int16(p[i+2]) | int16(p[i+3])<<8
+	audio := audioBuffer(p)
+
+	for i := 0; i < audio.Len(); i++ {
+
+		l, r := audio.Get(i)
 
 		if delay.feedbackLoop {
 
 			if len(delay.buffer) > 0 {
-				lc = addChannelValue(lc, int16(float64(delay.buffer[0][0])*delay.strength))
-				rc = addChannelValue(rc, int16(float64(delay.buffer[0][1])*delay.strength))
+
+				l += delay.buffer[0][0] * delay.strength
+				r += delay.buffer[0][1] * delay.strength
+
 			}
 
-			delay.buffer = append(delay.buffer, [2]int16{lc, rc})
+			delay.buffer = append(delay.buffer, [2]float64{l, r})
 
 		} else {
 
-			delay.buffer = append(delay.buffer, [2]int16{lc, rc})
-			lc = addChannelValue(lc, int16(float64(delay.buffer[0][0])*delay.strength))
-			rc = addChannelValue(rc, int16(float64(delay.buffer[0][1])*delay.strength))
+			delay.buffer = append(delay.buffer, [2]float64{l, r})
+			l += delay.buffer[0][0] * delay.strength
+			r += delay.buffer[0][1] * delay.strength
 
 		}
 
@@ -324,10 +351,9 @@ func (delay *Delay) applyEffect(p []byte) {
 			delay.buffer = delay.buffer[1:]
 		}
 
-		p[i] = byte(lc)
-		p[i+1] = byte(lc >> 8)
-		p[i+2] = byte(rc)
-		p[i+3] = byte(rc >> 8)
+		if delay.active {
+			audio.Set(i, l, r)
+		}
 
 	}
 
@@ -341,8 +367,9 @@ func (delay *Delay) Seek(offset int64, whence int) (int64, error) {
 }
 
 // SetActive sets the effect to be active.
-func (delay *Delay) SetActive(active bool) {
+func (delay *Delay) SetActive(active bool) *Delay {
 	delay.active = active
+	return delay
 }
 
 // Active returns if the effect is active.
@@ -350,18 +377,29 @@ func (delay *Delay) Active() bool {
 	return delay.active
 }
 
+// SetWait sets the overall wait time of the Delay effect in seconds as it's added on top of the original signal.
+// 0 is the minimum value.
+func (delay *Delay) SetWait(waitTime float64) *Delay {
+	if waitTime < 0 {
+		waitTime = 0
+	}
+	delay.wait = waitTime
+	return delay
+}
+
 // Wait returns the wait time of the Delay effect.
 func (delay *Delay) Wait() float64 {
 	return delay.wait
 }
 
-// SetWait sets the overall wait time of the Delay effect in seconds as it's added on top of the original signal.
+// SetStrength sets the overall volume of the Delay effect as it's added on top of the original signal.
 // 0 is the minimum value.
-func (delay *Delay) SetWait(waitTime float64) {
-	if waitTime < 0 {
-		waitTime = 0
+func (delay *Delay) SetStrength(strength float64) *Delay {
+	if strength < 0 {
+		strength = 0
 	}
-	delay.wait = waitTime
+	delay.strength = strength
+	return delay
 }
 
 // Strength returns the strength of the Delay effect.
@@ -369,13 +407,10 @@ func (delay *Delay) Strength() float64 {
 	return delay.strength
 }
 
-// SetStrength sets the overall volume of the Delay effect as it's added on top of the original signal.
-// 0 is the minimum value.
-func (delay *Delay) SetStrength(strength float64) {
-	if strength < 0 {
-		strength = 0
-	}
-	delay.strength = strength
+// SetFeedbackLoop sets the feedback loop of the delay. If set to on, the delay's results feed back into itself.
+func (delay *Delay) SetFeedbackLoop(on bool) *Delay {
+	delay.feedbackLoop = on
+	return delay
 }
 
 // FeedbackLoop returns if the delay's results feed back into itself or not.
@@ -383,11 +418,11 @@ func (delay *Delay) FeedbackLoop() bool {
 	return delay.feedbackLoop
 }
 
-// SetFeedbackLoop sets the feedback loop of the delay. If set to on, the delay's results feed back into itself.
-func (delay *Delay) SetFeedbackLoop(on bool) {
-	delay.feedbackLoop = on
+func (delay *Delay) setSource(source io.ReadSeeker) {
+	delay.Source = source
 }
 
+// Distort distorts the stream that plays through it, clipping the signal.
 type Distort struct {
 	Source   io.ReadSeeker
 	strength float64
@@ -395,15 +430,14 @@ type Distort struct {
 }
 
 // NewDistort creates a new Distort effect. source is the source stream to
-// apply the effect to, and the percent is a percentage ranging from 0
-// to 1 indicating how strongly the distortion should be.
+// apply the effect to.
 // If you add this effect to a DSPChannel, you can pass nil as the source, as
 // it will take effect for whatever streams are played through the DSPChannel.
-func NewDistort(source io.ReadSeeker, strength float64) *Distort {
+func NewDistort(source io.ReadSeeker) *Distort {
 
 	return &Distort{
 		Source:   source,
-		strength: strength,
+		strength: 0,
 		active:   true,
 	}
 
@@ -433,28 +467,25 @@ func (distort *Distort) Read(p []byte) (n int, err error) {
 
 func (distort *Distort) applyEffect(p []byte) {
 
-	if !distort.active {
+	if !distort.active || distort.strength <= 0 {
 		return
 	}
 
-	clipMax := float64(math.MaxInt16) * distort.strength
+	audio := audioBuffer(p)
 
-	if clipMax < 1 {
-		clipMax = 1
-	}
+	for i := 0; i < audio.Len(); i++ {
 
-	for i := 0; i < len(p); i += 4 {
+		l, r := audio.Get(i)
 
-		lc := int16(p[i]) | int16(p[i+1])<<8
-		rc := int16(p[i+2]) | int16(p[i+3])<<8
+		if math.Abs(l) < distort.strength {
+			l = math.Round(l)
+		}
 
-		lc = int16(math.Floor(float64(lc)/clipMax) * clipMax)
-		rc = int16(math.Floor(float64(rc)/clipMax) * clipMax)
+		if math.Abs(r) < distort.strength {
+			r = math.Round(r)
+		}
 
-		p[i] = byte(lc)
-		p[i+1] = byte(lc >> 8)
-		p[i+2] = byte(rc)
-		p[i+3] = byte(rc >> 8)
+		audio.Set(i, l, r)
 
 	}
 
@@ -468,8 +499,9 @@ func (distort *Distort) Seek(offset int64, whence int) (int64, error) {
 }
 
 // SetActive sets the effect to be active.
-func (distort *Distort) SetActive(active bool) {
+func (distort *Distort) SetActive(active bool) *Distort {
 	distort.active = active
+	return distort
 }
 
 // Active returns if the effect is active.
@@ -483,11 +515,14 @@ func (distort *Distort) Strength() float64 {
 }
 
 // SetStrength sets the overall strength of the Distort effect. 0 is the minimum value.
-func (distort *Distort) SetStrength(strength float64) {
-	if strength < 0 {
-		strength = 0
-	}
+func (distort *Distort) SetStrength(strength float64) *Distort {
+	strength = clamp(strength, 0, 1)
 	distort.strength = strength
+	return distort
+}
+
+func (distort *Distort) setSource(source io.ReadSeeker) {
+	distort.Source = source
 }
 
 type LowpassFilter struct {
@@ -499,15 +534,13 @@ type LowpassFilter struct {
 }
 
 // NewLowpassFilter creates a new low-pass filter for the given source stream.
-// filterPercentage, ranging from 0 (un-filtered) to 1 (fully filtered), indicates
-// how strongly the stream should be filtered.
 // If you add this effect to a DSPChannel, there's no need to pass a source, as
 // it will take effect for whatever streams are played through the DSPChannel.
-func NewLowpassFilter(source io.ReadSeeker, filterPercentage float64) *LowpassFilter {
+func NewLowpassFilter(source io.ReadSeeker) *LowpassFilter {
 
 	return &LowpassFilter{
 		Source:   source,
-		strength: filterPercentage,
+		strength: 0.5,
 		active:   true,
 	}
 
@@ -542,40 +575,19 @@ func (lpf *LowpassFilter) applyEffect(p []byte) {
 	}
 
 	alpha := math.Sin(lpf.strength * math.Pi / 2)
+	audio := audioBuffer(p)
 
-	for i := 0; i < len(p); i += 4 {
+	for i := 0; i < audio.Len(); i++ {
 
-		lc := int16(p[i]) | int16(p[i+1])<<8
-		rc := int16(p[i+2]) | int16(p[i+3])<<8
+		l, r := audio.Get(i)
 
-		lcc := float64(lc)
-		rcc := float64(rc)
+		l = (1-alpha)*l + (lpf.prevLeft * alpha)
+		r = (1-alpha)*r + (lpf.prevRight * alpha)
 
-		lcc = (1-alpha)*lcc + (lpf.prevLeft * alpha)
-		rcc = (1-alpha)*rcc + (lpf.prevRight * alpha)
+		lpf.prevLeft = l
+		lpf.prevRight = r
 
-		lpf.prevLeft = lcc
-		lpf.prevRight = rcc
-
-		if lcc > math.MaxInt16 {
-			lcc = math.MaxInt16
-		} else if lcc < math.MinInt16 {
-			lcc = math.MinInt16
-		}
-
-		if rcc > math.MaxInt16 {
-			rcc = math.MaxInt16
-		} else if rcc < math.MinInt16 {
-			rcc = math.MinInt16
-		}
-
-		lc = int16(lcc)
-		rc = int16(rcc)
-
-		p[i] = byte(lc)
-		p[i+1] = byte(lc >> 8)
-		p[i+2] = byte(rc)
-		p[i+3] = byte(rc >> 8)
+		audio.Set(i, l, r)
 
 	}
 
@@ -589,8 +601,9 @@ func (lpf *LowpassFilter) Seek(offset int64, whence int) (int64, error) {
 }
 
 // SetActive sets the effect to be active.
-func (lpf *LowpassFilter) SetActive(active bool) {
+func (lpf *LowpassFilter) SetActive(active bool) *LowpassFilter {
 	lpf.active = active
+	return lpf
 }
 
 // Active returns if the effect is active.
@@ -602,14 +615,117 @@ func (lpf *LowpassFilter) Strength() float64 {
 	return lpf.strength
 }
 
-func (lpf *LowpassFilter) SetStrength(strength float64) {
-	if strength < 0 {
-		strength = 0
-	} else if strength > 1 {
-		strength = 1
+func (lpf *LowpassFilter) SetStrength(strength float64) *LowpassFilter {
+	strength = clamp(strength, 0, 1)
+	lpf.strength = strength
+	return lpf
+}
+
+func (lpf *LowpassFilter) setSource(source io.ReadSeeker) {
+	lpf.Source = source
+}
+
+// Bitcrush is an effect that changes the pitch of the incoming audio byte stream.
+type Bitcrush struct {
+	strength float64
+	active   bool
+	Source   io.ReadSeeker
+}
+
+// NewBitcrush creates a new Bitcrush effect.
+// source is the source stream to apply this effect to.
+// If you add this effect to a DSPChannel, there's no need to pass a source, as
+// it will take effect for whatever streams are played through the DSPChannel.
+func NewBitcrush(source io.ReadSeeker) *Bitcrush {
+	bitcrush := &Bitcrush{Source: source, active: true, strength: 1}
+	return bitcrush
+}
+
+// Clone clones the effect, returning an IEffect.
+func (bitcrush *Bitcrush) Clone() IEffect {
+	return &Bitcrush{
+		strength: bitcrush.strength,
+		active:   bitcrush.active,
+		Source:   bitcrush.Source,
+	}
+}
+
+func (bitcrush *Bitcrush) Read(p []byte) (n int, err error) {
+
+	_, err = bitcrush.Source.Read(p)
+	if err != nil {
+		return 0, err
 	}
 
-	lpf.strength = strength
+	bitcrush.applyEffect(p)
+
+	return len(p), nil
+}
+
+func (bitcrush *Bitcrush) applyEffect(p []byte) {
+
+	if !bitcrush.active || bitcrush.strength == 0 {
+		return
+	}
+
+	audio := audioBuffer(p)
+
+	s := ease.InExpo(float32(bitcrush.strength), 0, 1, 1)
+
+	str := float64(s) * 1000
+
+	// str := (bitcrush.strength) * 1000
+
+	for i := 0; i < audio.Len(); i++ {
+
+		ri := int(math.Round(float64(i)/str) * str)
+
+		fmt.Println(i, ri)
+
+		if ri >= audio.Len() {
+			ri = audio.Len() - 1
+		}
+
+		// fmt.Println(ri)
+
+		l, r := audio.Get(ri)
+		audio.Set(i, l, r)
+
+	}
+
+}
+
+func (bitcrush *Bitcrush) Seek(offset int64, whence int) (int64, error) {
+	if bitcrush.Source == nil {
+		return 0, nil
+	}
+	return bitcrush.Source.Seek(offset, whence)
+}
+
+// SetActive sets the effect to be active.
+func (bitcrush *Bitcrush) SetActive(active bool) *Bitcrush {
+	bitcrush.active = active
+	return bitcrush
+}
+
+// Active returns if the effect is active.
+func (bitcrush *Bitcrush) Active() bool {
+	return bitcrush.active
+}
+
+// Strength returns the strength of the Bitcrush effect as a percentage.
+func (bitcrush *Bitcrush) Strength() float64 {
+	return bitcrush.strength
+}
+
+// SetStrength sets the strength of the Bitcrush effect to the specified percentage.
+func (bitcrush *Bitcrush) SetStrength(bitcrushFactor float64) *Bitcrush {
+	bitcrush.strength = clamp(bitcrushFactor, 0, 1)
+	return bitcrush
+}
+
+func (bitcrush *Bitcrush) setSource(source io.ReadSeeker) {
+	bitcrush.Source = source
 }
 
 // type Reverb struct {

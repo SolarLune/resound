@@ -1,21 +1,27 @@
 package resound
 
-import (
-	"math"
-)
-
-func addChannelValue(value, add int16) int16 {
-
-	if add > 0 {
-		if value > math.MaxInt16-add {
-			return math.MaxInt16
-		}
-	} else {
-		if value < math.MinInt16-add {
-			return math.MinInt16
-		}
+// ChainEffects chains multiple effects for you automatically, returning the last chained effect.
+// Example:
+// sfxChain := resound.Chain(
+//
+//	resound.NewDelay(nil).SetWait(0.2).SetStrength(0.5),
+//	resound.NewPan(nil),
+//	resound.NewVolume(nil),
+//
+// )
+// sfxChain at the end would be the Volume effect, which is being fed by the Pan effect, which is fed by the Delay effect.
+func ChainEffects(effects ...IEffect) IEffect {
+	for i := 1; i < len(effects); i++ {
+		effects[i].setSource(effects[i-1])
 	}
+	return effects[len(effects)-1]
+}
 
-	return value + add
-
+func clamp(v, min, max float64) float64 {
+	if v > max {
+		return max
+	} else if v < min {
+		return min
+	}
+	return v
 }

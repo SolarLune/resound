@@ -45,9 +45,9 @@ func NewGame() *Game {
 	// Now we add effects; we don't have to specify a stream because a DSPChannel applies them
 	// to all streams played through the channel.
 
-	game.DSP.Add("delay", resound.NewDelay(nil, 0.1, 0.9, false))
-	game.DSP.Add("pan", resound.NewPan(nil, 0))
-	game.DSP.Add("volume", resound.NewVolume(nil, 1))
+	game.DSP.Add("delay", resound.NewDelay(nil).SetWait(0.1).SetStrength(0.9))
+	game.DSP.Add("pan", resound.NewPan(nil))
+	game.DSP.Add("volume", resound.NewVolume(nil))
 
 	reader := bytes.NewReader(songData)
 
@@ -62,7 +62,7 @@ func NewGame() *Game {
 	// I want to make the music quieter, so I'll actually add a volume
 	// effect in the middle of this
 
-	volume := resound.NewVolume(loop, 0.25)
+	volume := resound.NewVolume(loop).SetStrength(0.6)
 
 	player := game.DSP.CreatePlayer(volume)
 	player.SetBufferSize(time.Millisecond * 50)

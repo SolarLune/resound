@@ -37,14 +37,13 @@ func main() {
 
 	loop := audio.NewInfiniteLoop(stream, stream.Length())
 
-    // But here, we'll create a Delay effect and apply it. The first and second
-    // arguments are how many seconds should pass between the initial sound and
-    // the delay, and how loud (in percentage) the delay should be. The last argument
-    // is if the delay should feedback into itself.
-    delay := resound.NewDelay(loop, sampleRate, 0.1, 0.2, false)
+    // But here, we'll create a Delay effect and apply it.
+    delay := resound.NewDelay(loop).SetWait(0.1).SetStrength(0.2)
 
     // Effects in Resound wrap streams (including other effects), so you can just use them
-    // like you would an ordinary stream.
+    // like you would an ordinary audio stream in Ebitengine.
+
+    // You can also easily chain effects by using resound.ChainEffects().
 
     // Now we create a new player of the loop + delay:
 	player, err := audio.NewPlayer(context, delay)
@@ -90,11 +89,13 @@ func main() {
 
     // But here, we create a DSPChannel. A DSPChannel represents a group of effects
     // that sound streams play through. When playing a stream through a DSPChannel,
-    // the stream takes on the effects applied to the DSPChannel.
+    // the stream takes on the effects applied to the DSPChannel. We don't have to
+    // pass a stream to effects when used with a DSPChannel, because every stream
+    // played through the channel takes the effect.
     dsp = resound.NewDSPChannel(context)
-    dsp.AddEffect("delay", NewDelay(nil, 0.1, 0.25))
-    dsp.AddEffect("distort", NewDistort(nil, 0.25))
-    dsp.AddEffect("volume", NewVolume(0.25))
+    dsp.AddEffect("delay", NewDelay(nil).SetWait(0.1).SetStrength(0.25))
+    dsp.AddEffect("distort", NewDistort(nil).SetStrength(0.25))
+    dsp.AddEffect("volume", NewVolume(nil).SetStrength(0.25))
 
     // Now we create a new player from the DSP channel. This will return a
     // *resound.ChannelPlayback object, which works similarly to an audio.Player
@@ -109,18 +110,30 @@ func main() {
 
 ```
 
-## What effects are implemented?
+## What is implemented?
+
+- [ ] Global Stop - Tracking playing sounds to globally stop all sounds that are playing back
+- [ ] DSPChannel Stop - ^, but for a DSP channel
+
+### Effects
 
 - [X] Volume
 - [X] Pan
 - [X] Delay
 - [X] Distortion
 - [X] Low-pass Filter
+- [X] Bitcrush (?)
 - [ ] High-pass Filter
 - [ ] Reverb
-- [ ] Mix
-- [ ] Fade
-- [ ] Loop (like, looping a signal after so much time)
+- [ ] Mix / Fade (between two streams, or between a stream and silence, and over a customizeable time)
+- [ ] Loop (like, looping a signal after so much time has passed)
+- [ ] Pitch shifting (playback using effectively a lower / higher sample rate?)
+- [ ] 3D Sound (quick and easy panning and volume adjustment based on distance from listener to source)
+
+### Generators
+
+- [ ] Silence
+- [ ] Static
 
   ... And whatever else may be necessary.
 
