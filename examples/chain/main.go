@@ -42,7 +42,7 @@ func NewGame() *Game {
 	loop := audio.NewInfiniteLoop(stream, stream.Length())
 
 	// Here, we want to chain effects together, so this utility function can be used
-	// to make it simpler.
+	// to make it simpler, as otherwise, it's more difficult to reorder effects.
 
 	sfx := resound.ChainEffects(
 		resound.NewDelay(loop).SetWait(0.15).SetStrength(0.75).SetFeedbackLoop(true),

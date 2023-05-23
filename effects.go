@@ -9,15 +9,17 @@ import (
 	"github.com/tanema/gween/ease"
 )
 
-// audioBuffer wraps a []byte of audio data and provides handy functions to get
-// and set values for volume.
-type audioBuffer []byte
+// AudioBuffer wraps a []byte of audio data and provides handy functions to get
+// and set values for a specific position in the buffer.
+type AudioBuffer []byte
 
-func (ab audioBuffer) Len() int {
+func (ab AudioBuffer) Len() int {
 	return len(ab) / 4
 }
 
-func (ab audioBuffer) Get(i int) (l, r float64) {
+// Get returns the values for the left and right audio channels at the specified stream sample index.
+// The values range from 0 to 1.
+func (ab AudioBuffer) Get(i int) (l, r float64) {
 	lc := float64(int16(ab[i*4]) | int16(ab[i*4+1])<<8)
 	rc := float64(int16(ab[i*4+2]) | int16(ab[i*4+3])<<8)
 	lc /= math.MaxInt16
@@ -25,7 +27,9 @@ func (ab audioBuffer) Get(i int) (l, r float64) {
 	return lc, rc
 }
 
-func (ab audioBuffer) Set(i int, l, r float64) {
+// Set sets the left and right audio channel values at the specified stream sample index.
+// The values should range from 0 to 1.
+func (ab AudioBuffer) Set(i int, l, r float64) {
 
 	max := float64(math.MaxInt16)
 
@@ -45,8 +49,8 @@ func (ab audioBuffer) Set(i int, l, r float64) {
 // It represents the result of applying an effect to an audio stream, and is playable in its own right.
 type IEffect interface {
 	io.ReadSeeker
-	applyEffect(data []byte)
-	setSource(io.ReadSeeker)
+	ApplyEffect(data []byte) // This function is called when sound data goes through an effect. The effect should modify the source data buffer.
+	SetSource(io.ReadSeeker) // This function allows an effect's source to be dynamically altered; this allows for easy chaining with resound.ChainEffects().
 }
 
 // Volume is an effect that changes the overall volume of the incoming audio byte stream.
@@ -82,14 +86,15 @@ func (volume *Volume) Read(p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	volume.applyEffect(p)
+	volume.ApplyEffect(p)
 
 	return n, nil
 
 }
 
-func (volume *Volume) applyEffect(p []byte) {
+func (volume *Volume) ApplyEffect(p []byte) {
 
+	// If the effect isn't active, then we can return early.
 	if !volume.active {
 		return
 	}
@@ -99,15 +104,20 @@ func (volume *Volume) applyEffect(p []byte) {
 		perc = float64(ease.InSine(float32(volume.strength), 0, 1, 1))
 	}
 
-	audio := audioBuffer(p)
+	// Make an audio buffer for easy stream manipulation.
+	audio := AudioBuffer(p)
 
+	// Loop through all frames in the stream that are available to be read.
 	for i := 0; i < audio.Len(); i++ {
 
+		// Get the audio value:
 		l, r := audio.Get(i)
 
+		// Multiply it by the volume strength:
 		l *= perc
 		r *= perc
 
+		// Set it back, and you're done.
 		audio.Set(i, l, r)
 	}
 
@@ -147,7 +157,7 @@ func (volume *Volume) Strength() float64 {
 	return volume.strength
 }
 
-func (volume *Volume) setSource(source io.ReadSeeker) {
+func (volume *Volume) SetSource(source io.ReadSeeker) {
 	volume.Source = source
 }
 
@@ -185,13 +195,13 @@ func (pan *Pan) Read(p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	pan.applyEffect(p)
+	pan.ApplyEffect(p)
 
 	return len(p), nil
 
 }
 
-func (pan *Pan) applyEffect(p []byte) {
+func (pan *Pan) ApplyEffect(p []byte) {
 
 	if !pan.active {
 		return
@@ -211,7 +221,7 @@ func (pan *Pan) applyEffect(p []byte) {
 	ls := math.Min(pan.strength*-1+1, 1)
 	rs := math.Min(pan.strength+1, 1)
 
-	audio := audioBuffer(p)
+	audio := AudioBuffer(p)
 
 	for i := 0; i < audio.Len(); i++ {
 
@@ -261,7 +271,7 @@ func (pan *Pan) Pan() float64 {
 	return pan.strength
 }
 
-func (pan *Pan) setSource(source io.ReadSeeker) {
+func (pan *Pan) SetSource(source io.ReadSeeker) {
 	pan.Source = source
 }
 
@@ -311,17 +321,17 @@ func (delay *Delay) Read(p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	delay.applyEffect(p)
+	delay.ApplyEffect(p)
 
 	return len(p), nil
 
 }
 
-func (delay *Delay) applyEffect(p []byte) {
+func (delay *Delay) ApplyEffect(p []byte) {
 
 	sampleRate := audio.CurrentContext().SampleRate()
 
-	audio := audioBuffer(p)
+	audio := AudioBuffer(p)
 
 	for i := 0; i < audio.Len(); i++ {
 
@@ -418,7 +428,7 @@ func (delay *Delay) FeedbackLoop() bool {
 	return delay.feedbackLoop
 }
 
-func (delay *Delay) setSource(source io.ReadSeeker) {
+func (delay *Delay) SetSource(source io.ReadSeeker) {
 	delay.Source = source
 }
 
@@ -459,19 +469,19 @@ func (distort *Distort) Read(p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	distort.applyEffect(p)
+	distort.ApplyEffect(p)
 
 	return len(p), nil
 
 }
 
-func (distort *Distort) applyEffect(p []byte) {
+func (distort *Distort) ApplyEffect(p []byte) {
 
 	if !distort.active || distort.strength <= 0 {
 		return
 	}
 
-	audio := audioBuffer(p)
+	audio := AudioBuffer(p)
 
 	for i := 0; i < audio.Len(); i++ {
 
@@ -521,7 +531,7 @@ func (distort *Distort) SetStrength(strength float64) *Distort {
 	return distort
 }
 
-func (distort *Distort) setSource(source io.ReadSeeker) {
+func (distort *Distort) SetSource(source io.ReadSeeker) {
 	distort.Source = source
 }
 
@@ -562,20 +572,20 @@ func (lpf *LowpassFilter) Read(p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	lpf.applyEffect(p)
+	lpf.ApplyEffect(p)
 
 	return len(p), nil
 
 }
 
-func (lpf *LowpassFilter) applyEffect(p []byte) {
+func (lpf *LowpassFilter) ApplyEffect(p []byte) {
 
 	if !lpf.active {
 		return
 	}
 
 	alpha := math.Sin(lpf.strength * math.Pi / 2)
-	audio := audioBuffer(p)
+	audio := AudioBuffer(p)
 
 	for i := 0; i < audio.Len(); i++ {
 
@@ -621,7 +631,7 @@ func (lpf *LowpassFilter) SetStrength(strength float64) *LowpassFilter {
 	return lpf
 }
 
-func (lpf *LowpassFilter) setSource(source io.ReadSeeker) {
+func (lpf *LowpassFilter) SetSource(source io.ReadSeeker) {
 	lpf.Source = source
 }
 
@@ -657,18 +667,18 @@ func (bitcrush *Bitcrush) Read(p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	bitcrush.applyEffect(p)
+	bitcrush.ApplyEffect(p)
 
 	return len(p), nil
 }
 
-func (bitcrush *Bitcrush) applyEffect(p []byte) {
+func (bitcrush *Bitcrush) ApplyEffect(p []byte) {
 
 	if !bitcrush.active || bitcrush.strength == 0 {
 		return
 	}
 
-	audio := audioBuffer(p)
+	audio := AudioBuffer(p)
 
 	s := ease.InExpo(float32(bitcrush.strength), 0, 1, 1)
 
@@ -724,7 +734,7 @@ func (bitcrush *Bitcrush) SetStrength(bitcrushFactor float64) *Bitcrush {
 	return bitcrush
 }
 
-func (bitcrush *Bitcrush) setSource(source io.ReadSeeker) {
+func (bitcrush *Bitcrush) SetSource(source io.ReadSeeker) {
 	bitcrush.Source = source
 }
 
@@ -764,13 +774,13 @@ func (bitcrush *Bitcrush) setSource(source io.ReadSeeker) {
 // 		return 0, err
 // 	}
 
-// 	reverb.applyEffect(p)
+// 	reverb.ApplyEffect(p)
 
 // 	return len(p), nil
 
 // }
 
-// func (reverb *Reverb) applyEffect(p []byte) {
+// func (reverb *Reverb) ApplyEffect(p []byte) {
 
 // 	for i := 0; i < len(p); i += 4 {
 // 		lc := int16(p[i]) | int16(p[i+1])<<8

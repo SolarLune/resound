@@ -48,7 +48,7 @@ func (es *DSPPlayer) Read(p []byte) (n int, err error) {
 	}
 
 	for _, effect := range es.Channel.EffectOrder {
-		effect.applyEffect(p)
+		effect.ApplyEffect(p)
 	}
 
 	return n, nil
