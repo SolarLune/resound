@@ -1,9 +1,9 @@
 package resound
 
 import (
-	"fmt"
 	"io"
 	"math"
+	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/tanema/gween/ease"
@@ -18,7 +18,7 @@ func (ab AudioBuffer) Len() int {
 }
 
 // Get returns the values for the left and right audio channels at the specified stream sample index.
-// The values range from 0 to 1.
+// The values returned for the left and right audio channels range from 0 to 1.
 func (ab AudioBuffer) Get(i int) (l, r float64) {
 	lc := float64(int16(ab[i*4]) | int16(ab[i*4+1])<<8)
 	rc := float64(int16(ab[i*4+2]) | int16(ab[i*4+3])<<8)
@@ -45,6 +45,18 @@ func (ab AudioBuffer) Set(i int, l, r float64) {
 	ab[(i*4)+3] = byte(rcc >> 8)
 }
 
+func (ab AudioBuffer) String() string {
+	s := "{ "
+	for i := 0; i < ab.Len(); i++ {
+		l, r := ab.Get(i)
+		ls := strconv.FormatFloat(l, 'f', 6, 64)
+		rs := strconv.FormatFloat(r, 'f', 6, 64)
+		s += "( " + ls + ", " + rs + " ) "
+	}
+	s += " }"
+	return s
+}
+
 // IEffect indicates an effect that implements io.ReadSeeker and generally takes effect on an existing audio stream.
 // It represents the result of applying an effect to an audio stream, and is playable in its own right.
 type IEffect interface {
@@ -55,19 +67,18 @@ type IEffect interface {
 
 // Volume is an effect that changes the overall volume of the incoming audio byte stream.
 type Volume struct {
-	strength float64
-	active   bool
-	Source   io.ReadSeeker
+	strength      float64
+	normalization float64
+	active        bool
+	Source        io.ReadSeeker
 }
 
 // NewVolume creates a new Volume effect. source is the source stream to apply this effect to.
 // If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
 // streams are played through the DSPChannel.
 func NewVolume(source io.ReadSeeker) *Volume {
-
-	volume := &Volume{Source: source, strength: 1, active: true}
+	volume := &Volume{Source: source, strength: 1, active: true, normalization: 1}
 	return volume
-
 }
 
 // Clone clones the effect, returning an IEffect.
@@ -103,6 +114,8 @@ func (volume *Volume) ApplyEffect(p []byte) {
 	if volume.strength <= 1 {
 		perc = float64(ease.InSine(float32(volume.strength), 0, 1, 1))
 	}
+
+	perc *= volume.normalization
 
 	// Make an audio buffer for easy stream manipulation.
 	audio := AudioBuffer(p)
@@ -140,6 +153,12 @@ func (volume *Volume) Active() bool {
 	return volume.active
 }
 
+// SetNormalizationFactor sets the normalization factor for the Volume effect.
+// This should be obtained from an AudioProperties Analysis.
+func (volume *Volume) SetNormalizationFactor(normalization float64) {
+	volume.normalization = normalization
+}
+
 // SetStrength sets the strength of the Volume effect to the specified percentage.
 // The lowest possible value is 0.0, with 1.0 taking a 100% effect.
 // The volume is altered on a sine-based easing curve.
@@ -160,6 +179,70 @@ func (volume *Volume) Strength() float64 {
 func (volume *Volume) SetSource(source io.ReadSeeker) {
 	volume.Source = source
 }
+
+// // Loop is an effect that loops an incoming audio byte stream.
+// type Loop struct {
+// 	loopCount       int
+// 	activeLoopIndex int
+// 	active          bool
+// 	Source          io.ReadSeeker
+// }
+
+// // NewLoop creates a new Loop effect. source is the source stream to apply this effect to.
+// // If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
+// // streams are played through the DSPChannel.
+// func NewLoop(source io.ReadSeeker) *Loop {
+// 	volume := &Loop{Source: source, loopCount: -1}
+// 	return volume
+// }
+
+// // Clone clones the effect, returning an IEffect.
+// func (loop *Loop) Clone() IEffect {
+// 	return &Loop{
+// 		loopCount:       loop.loopCount,
+// 		activeLoopIndex: loop.activeLoopIndex,
+// 	}
+// }
+
+// func (loop *Loop) Read(p []byte) (n int, err error) {
+
+// 	n, err = loop.Source.Read(p)
+// 	if err != nil {
+// 		if loop.Source != nil {
+// 			loop.Seek(0, io.SeekStart)
+// 		} else {
+// 			return 0, err
+// 		}
+// 	}
+
+// 	return n, nil
+
+// }
+
+// func (loop *Loop) ApplyEffect(p []byte) {
+// 	// The loop effect doesn't actually do anything to the source audio.
+// }
+
+// func (loop *Loop) Seek(offset int64, whence int) (int64, error) {
+// 	if loop.Source == nil {
+// 		return 0, nil
+// 	}
+// 	return loop.Source.Seek(offset, whence)
+// }
+
+// // SetActive sets the effect to be active.
+// func (loop *Loop) SetActive(active bool) {
+// 	loop.active = active
+// }
+
+// // Active returns if the effect is active.
+// func (loop *Loop) Active() bool {
+// 	return loop.active
+// }
+
+// func (loop *Loop) SetSource(source io.ReadSeeker) {
+// 	loop.Source = source
+// }
 
 // Pan is a panning effect, handling panning the sound between the left and right channels.
 type Pan struct {
@@ -690,13 +773,9 @@ func (bitcrush *Bitcrush) ApplyEffect(p []byte) {
 
 		ri := int(math.Round(float64(i)/str) * str)
 
-		fmt.Println(i, ri)
-
 		if ri >= audio.Len() {
 			ri = audio.Len() - 1
 		}
-
-		// fmt.Println(ri)
 
 		l, r := audio.Get(ri)
 		audio.Set(i, l, r)

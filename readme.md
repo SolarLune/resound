@@ -110,10 +110,11 @@ func main() {
 
 ```
 
-## What is implemented?
+## To-do
 
 - [ ] Global Stop - Tracking playing sounds to globally stop all sounds that are playing back
 - [ ] DSPChannel Stop - ^, but for a DSP channel
+- [x] Volume normalization - done through the AudioProperties struct.
 
 ### Effects
 
@@ -126,7 +127,7 @@ func main() {
 - [ ] High-pass Filter
 - [ ] Reverb
 - [ ] Mix / Fade (between two streams, or between a stream and silence, and over a customizeable time)
-- [ ] Loop (like, looping a signal after so much time has passed)
+- [ ] Loop (like, looping a signal after so much time has passed or the signal ends)
 - [ ] Pitch shifting (playback using effectively a lower / higher sample rate?)
 - [ ] 3D Sound (quick and easy panning and volume adjustment based on distance from listener to source)
 
@@ -139,4 +140,4 @@ func main() {
 
 # Known Issues
 
-- Currently, effects directly apply on top of streams, which means that any effects that could make streams longer (like reverbs or delays) will get cut off if the stream ends.
+- Currently, effects directly apply on top of streams, which means that any effects that could make streams longer (like reverbs or delays) will get cut off if the source stream ends.
