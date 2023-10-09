@@ -43,8 +43,8 @@ func (ap *AudioProperty) Analyze(stream io.ReadSeeker, scanCount int64) Analysis
 
 	largest := 0.0
 
-	// Get the length of the stream by seeking to the end
-	length, _ := stream.Seek(0, io.SeekEnd)
+	// Get the length of the stream by seeking to the end; we can't seek using io.SeekEnd because it has no end, apparently
+	length, _ := stream.Seek(math.MaxInt64, io.SeekStart)
 
 	// Seek back afterwards as necessary
 	stream.Seek(0, io.SeekStart)
@@ -52,6 +52,8 @@ func (ap *AudioProperty) Analyze(stream io.ReadSeeker, scanCount int64) Analysis
 	seekJump := length / int64(scanCount)
 
 	var err error
+
+	pos := int64(0)
 
 	for err == nil {
 
@@ -79,7 +81,14 @@ func (ap *AudioProperty) Analyze(stream io.ReadSeeker, scanCount int64) Analysis
 
 		}
 
-		_, err = stream.Seek(seekJump-1, io.SeekCurrent)
+		// InfiniteLoops don't return an error if you attempt to seek too far; they just go back to the start when attempting to read
+		if pos+seekJump >= length {
+			break
+		}
+
+		pos += seekJump
+
+		_, err := stream.Seek(seekJump, io.SeekCurrent)
 
 		if err != nil {
 			break
