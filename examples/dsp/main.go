@@ -16,6 +16,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/solarlune/resound"
+	"github.com/solarlune/resound/effects"
 	"golang.org/x/image/font/basicfont"
 )
 
@@ -24,7 +25,7 @@ type Game struct {
 	Time float64
 }
 
-//go:embed encouragement.ogg
+//go:embed song.ogg
 var songData []byte
 
 //go:embed footstep.wav
@@ -45,9 +46,9 @@ func NewGame() *Game {
 	// Now we add effects; we don't have to specify a stream because a DSPChannel applies them
 	// to all streams played through the channel.
 
-	game.DSP.Add("delay", resound.NewDelay(nil).SetWait(0.1).SetStrength(0.9))
-	game.DSP.Add("pan", resound.NewPan(nil))
-	game.DSP.Add("volume", resound.NewVolume(nil))
+	game.DSP.Add("delay", effects.NewDelay(nil).SetWait(0.1).SetStrength(0.9))
+	game.DSP.Add("pan", effects.NewPan(nil))
+	game.DSP.Add("volume", effects.NewVolume(nil))
 
 	reader := bytes.NewReader(songData)
 
@@ -62,7 +63,7 @@ func NewGame() *Game {
 	// I want to make the music quieter, so I'll actually add a volume
 	// effect in the middle of this
 
-	volume := resound.NewVolume(loop).SetStrength(0.6)
+	volume := effects.NewVolume(loop).SetStrength(0.6)
 
 	player := game.DSP.CreatePlayer(volume)
 	player.SetBufferSize(time.Millisecond * 50)
@@ -75,8 +76,8 @@ func (game *Game) Update() error {
 
 	var returnCode error
 
-	pan := game.DSP.Effects["pan"].(*resound.Pan)
-	volume := game.DSP.Effects["volume"].(*resound.Volume)
+	pan := game.DSP.Effects["pan"].(*effects.Pan)
+	volume := game.DSP.Effects["volume"].(*effects.Volume)
 
 	panFactor := pan.Pan()
 
@@ -125,9 +126,21 @@ func (game *Game) Update() error {
 
 func (game *Game) Draw(screen *ebiten.Image) {
 
-	pan := game.DSP.Effects["pan"].(*resound.Pan)
-	volume := game.DSP.Effects["volume"].(*resound.Volume)
-	text.Draw(screen, fmt.Sprintf("This is an example showing how\nDSPChannels work. You create a\nDSPChannel, add effects, and play streams\nthrough it to share the effects.\n\nIn this example, left and right arrow keys\nalter the pan. Up and down alters the\nvolume. Press space to play a footstep\nsound through the channel.\n\nPan level: %.2f\nVolume level: %.2f", pan.Pan(), volume.Strength()), basicfont.Face7x13, 16, 16, color.White)
+	pan := game.DSP.Effects["pan"].(*effects.Pan)
+	volume := game.DSP.Effects["volume"].(*effects.Volume)
+	text.Draw(screen, fmt.Sprintf(`This is an example showing how
+DSPChannels work. You create a
+DSPChannel, add effects, and play streams
+through it to share the effects.
+
+In this example, left and right arrow keys
+alter the pan. Up and down alters the
+volume. Press space to play a footstep
+sound through the channel. Notice that
+it shares the properties as the music.
+
+Pan level: %.2f
+Volume level: %.2f`, pan.Pan(), volume.Strength()), basicfont.Face7x13, 16, 16, color.White)
 
 }
 

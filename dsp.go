@@ -41,17 +41,15 @@ func (es *DSPPlayer) Clone() *DSPPlayer {
 
 func (es *DSPPlayer) Read(p []byte) (n int, err error) {
 
-	n, err = es.Source.Read(p)
-
-	if err != nil || len(es.Channel.EffectOrder) == 0 || !es.Channel.Active {
-		return n, err
+	if n, err = es.Source.Read(p); err != nil || len(es.Channel.EffectOrder) == 0 || !es.Channel.Active {
+		return
 	}
 
 	for _, effect := range es.Channel.EffectOrder {
-		effect.ApplyEffect(p)
+		effect.ApplyEffect(p, n)
 	}
 
-	return n, nil
+	return
 
 }
 

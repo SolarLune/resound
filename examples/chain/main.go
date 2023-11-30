@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"image/color"
-	"time"
 
 	_ "embed"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/solarlune/resound"
+	"github.com/solarlune/resound/effects"
 	"golang.org/x/image/font/basicfont"
 )
 
@@ -20,7 +20,7 @@ type Game struct {
 	Time float64
 }
 
-//go:embed encouragement.ogg
+//go:embed song.ogg
 var songData []byte
 
 const sampleRate = 44100
@@ -45,16 +45,12 @@ func NewGame() *Game {
 	// to make it simpler, as otherwise, it's more difficult to reorder effects.
 
 	sfx := resound.ChainEffects(
-		resound.NewDelay(loop).SetWait(0.15).SetStrength(0.75).SetFeedbackLoop(true),
-		resound.NewPan(nil).SetPan(0.75),
-		resound.NewLowpassFilter(nil).SetStrength(0.9),
+		effects.NewDelay(loop).SetWait(0.15).SetStrength(0.75).SetFeedbackLoop(true),
+		effects.NewPan(nil).SetPan(0.75),
+		effects.NewLowpassFilter(nil).SetStrength(0.9),
 	)
 
 	player, err := context.NewPlayer(sfx)
-
-	// Change the buffer size so that we can have some responsiveness
-	// when we change effect parameters on the fly
-	player.SetBufferSize(time.Millisecond * 50)
 
 	if err != nil {
 		panic(err)

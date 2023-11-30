@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"image/color"
 
 	_ "embed"
@@ -11,26 +10,26 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/solarlune/resound"
+	"github.com/solarlune/resound/effects"
 	"golang.org/x/image/font/basicfont"
 )
 
 // Embed the sound samples
 
 //go:embed square_wave_5.ogg
-var square5 []byte
+var square5Data []byte
 
 //go:embed square_wave_25.ogg
-var square25 []byte
+var square25Data []byte
 
 //go:embed square_wave_100.ogg
-var square100 []byte
+var square100Data []byte
 
-//go:embed encouragement_quiet.ogg
-var encouragement []byte
+//go:embed song_quiet.ogg
+var songData []byte
 
 // Set the sample rate as a globally-available constant
 
@@ -53,9 +52,10 @@ func NewGame() *Game {
 	return game
 }
 
-// Here we play back audio streams. We pass a name too in order to pull relevant information from audio playback streams.
+// Here we play back audio streams. We pass a name too in order to store audio playback stream analysis information.
 func (game *Game) Play(name string, sample []byte) {
 
+	// Stop an existing sound if it's playing back.
 	if game.PlayingSound != nil && game.PlayingSound.IsPlaying() {
 		game.PlayingSound.Pause()
 		game.PlayingSound.Close()
@@ -71,11 +71,12 @@ func (game *Game) Play(name string, sample []byte) {
 		panic(err)
 	}
 
-	volume := resound.NewVolume(stream)
+	volume := effects.NewVolume(stream)
 
 	if game.Normalize {
 		// Here we analyze the stream, using a chunk size for scanning the audio file.
 		// The longer the file and the more variance in the file, the higher the fidelity should be.
+		// If the stream has been analyzed already, then this will simply return the results.
 		prop := game.AudioProperties.Get(name).Analyze(stream, 16)
 		volume.SetNormalizationFactor(prop.Normalization)
 	}
@@ -93,24 +94,24 @@ func (game *Game) Update() error {
 
 	var returnCode error
 
-	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
+	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		game.Normalize = !game.Normalize
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.Key1) {
-		game.Play("square5", square5)
+		game.Play("square5", square5Data)
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.Key2) {
-		game.Play("square25", square25)
+		game.Play("square25", square25Data)
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.Key3) {
-		game.Play("square100", square100)
+		game.Play("square100", square100Data)
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.Key4) {
-		game.Play("encouragement", encouragement)
+		game.Play("encouragement", songData)
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
@@ -127,9 +128,7 @@ func (game *Game) Draw(screen *ebiten.Image) {
 		normalizationOn = "on"
 	}
 
-	text.Draw(screen, "This is a simple example showing how\nvolume normalization works.\nPress 1, 2, 3, and 4 to play a sample\nwith varying volumes, and press A to\ntoggle normalization before playback.\nNormalization is currently: "+normalizationOn, basicfont.Face7x13, 16, 64, color.White)
-
-	ebitenutil.DebugPrint(screen, fmt.Sprintf("TPS: %0.2f, FPS: %0.2f", ebiten.CurrentTPS(), ebiten.CurrentFPS()))
+	text.Draw(screen, "This is a simple example showing how\nvolume normalization works.\nPress 1, 2, 3, and 4 to play a sample\nwith varying volumes, and press the Space\nkey to toggle normalization before\nplayback.\n\nNormalization is currently: "+normalizationOn, basicfont.Face7x13, 16, 16, color.White)
 
 }
 

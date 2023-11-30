@@ -13,48 +13,57 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
-	"github.com/solarlune/resound"
+	"github.com/solarlune/resound/effects"
 	"golang.org/x/image/font/basicfont"
 )
 
 type Game struct {
-	Delay *resound.Delay
+	Delay *effects.Delay
 	Time  float64
 }
 
-//go:embed encouragement.ogg
+//go:embed song.ogg
 var songData []byte
 
 const sampleRate = 44100
 
 func NewGame() *Game {
 
+	// Create a new audio context.
 	context := audio.NewContext(sampleRate)
 
-	game := &Game{}
-
+	// Create a reader for the audio stream.
 	reader := bytes.NewReader(songData)
 
+	// Decode the audio stream.
 	stream, err := vorbis.DecodeWithSampleRate(sampleRate, reader)
 
 	if err != nil {
 		panic(err)
 	}
 
+	// Create a loop from it.
 	loop := audio.NewInfiniteLoop(stream, stream.Length())
 
-	game.Delay = resound.NewDelay(loop).SetStrength(0.75)
+	// Create a delay effect for the audio stream.
+	game := &Game{
+		Delay: effects.NewDelay(loop).SetStrength(0.75),
+	}
 
+	// Create a player to play the sound with the effect.
 	player, err := context.NewPlayer(game.Delay)
-
-	// Change the buffer size so that we can have some responsiveness
-	// when we change effect parameters on the fly
-	player.SetBufferSize(time.Millisecond * 50)
 
 	if err != nil {
 		panic(err)
 	}
 
+	// Change the buffer size so that we can have some responsiveness
+	// when we change effect parameters on the fly; if we leave this
+	// default (which is like 200 milliseconds or something like that),
+	// then changing effect parameters will seem laggy.
+	player.SetBufferSize(time.Millisecond * 50)
+
+	// Finally, play the sound.
 	player.Play()
 
 	return game
@@ -62,19 +71,19 @@ func NewGame() *Game {
 
 func (game *Game) Update() error {
 
-	var returnCode error
+	var err error
 
-	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
+	if inpututil.IsKeyJustPressed(ebiten.KeySpace) {
 		game.Delay.SetActive(!game.Delay.Active())
 	}
 
 	game.Time += 1.0 / 60.0
 
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
-		returnCode = errors.New("quit")
+		err = errors.New("quit")
 	}
 
-	return returnCode
+	return err
 }
 
 func (game *Game) Draw(screen *ebiten.Image) {
@@ -85,7 +94,7 @@ func (game *Game) Draw(screen *ebiten.Image) {
 		delayOn = "Off"
 	}
 
-	text.Draw(screen, "This is a simple example showing how\nan effect (the Delay effect) is applied\nto a sound stream.\nPress A to toggle the delay effect.\n\nDelay: "+delayOn, basicfont.Face7x13, 16, 16, color.White)
+	text.Draw(screen, "This is a simple example showing how\nan effect (the Delay effect) is applied\nto a sound stream.\nPress the Space key to toggle\nthe delay effect.\n\nDelay: "+delayOn, basicfont.Face7x13, 16, 16, color.White)
 
 }
 

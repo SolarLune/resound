@@ -1,69 +1,13 @@
-package resound
+package effects
 
 import (
 	"io"
 	"math"
-	"strconv"
 
 	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/solarlune/resound"
 	"github.com/tanema/gween/ease"
 )
-
-// AudioBuffer wraps a []byte of audio data and provides handy functions to get
-// and set values for a specific position in the buffer.
-type AudioBuffer []byte
-
-func (ab AudioBuffer) Len() int {
-	return len(ab) / 4
-}
-
-// Get returns the values for the left and right audio channels at the specified stream sample index.
-// The values returned for the left and right audio channels range from 0 to 1.
-func (ab AudioBuffer) Get(i int) (l, r float64) {
-	lc := float64(int16(ab[i*4]) | int16(ab[i*4+1])<<8)
-	rc := float64(int16(ab[i*4+2]) | int16(ab[i*4+3])<<8)
-	lc /= math.MaxInt16
-	rc /= math.MaxInt16
-	return lc, rc
-}
-
-// Set sets the left and right audio channel values at the specified stream sample index.
-// The values should range from 0 to 1.
-func (ab AudioBuffer) Set(i int, l, r float64) {
-
-	max := float64(math.MaxInt16)
-
-	l = clamp(l*math.MaxInt16, -max, max)
-	r = clamp(r*math.MaxInt16, -max, max)
-
-	lcc := int16(l)
-	rcc := int16(r)
-
-	ab[(i * 4)] = byte(lcc)
-	ab[(i*4)+1] = byte(lcc >> 8)
-	ab[(i*4)+2] = byte(rcc)
-	ab[(i*4)+3] = byte(rcc >> 8)
-}
-
-func (ab AudioBuffer) String() string {
-	s := "{ "
-	for i := 0; i < ab.Len(); i++ {
-		l, r := ab.Get(i)
-		ls := strconv.FormatFloat(l, 'f', 6, 64)
-		rs := strconv.FormatFloat(r, 'f', 6, 64)
-		s += "( " + ls + ", " + rs + " ) "
-	}
-	s += " }"
-	return s
-}
-
-// IEffect indicates an effect that implements io.ReadSeeker and generally takes effect on an existing audio stream.
-// It represents the result of applying an effect to an audio stream, and is playable in its own right.
-type IEffect interface {
-	io.ReadSeeker
-	ApplyEffect(data []byte) // This function is called when sound data goes through an effect. The effect should modify the source data buffer.
-	SetSource(io.ReadSeeker) // This function allows an effect's source to be dynamically altered; this allows for easy chaining with resound.ChainEffects().
-}
 
 // Volume is an effect that changes the overall volume of the incoming audio byte stream.
 type Volume struct {
@@ -81,8 +25,8 @@ func NewVolume(source io.ReadSeeker) *Volume {
 	return volume
 }
 
-// Clone clones the effect, returning an IEffect.
-func (volume *Volume) Clone() IEffect {
+// Clone clones the effect, returning an resound.IEffect.
+func (volume *Volume) Clone() resound.IEffect {
 	return &Volume{
 		strength: volume.strength,
 		active:   volume.active,
@@ -92,18 +36,16 @@ func (volume *Volume) Clone() IEffect {
 
 func (volume *Volume) Read(p []byte) (n int, err error) {
 
-	n, err = volume.Source.Read(p)
-	if err != nil {
-		return 0, err
+	if n, err = volume.Source.Read(p); err != nil {
+		return
 	}
 
-	volume.ApplyEffect(p)
+	volume.ApplyEffect(p, n)
 
-	return n, nil
-
+	return
 }
 
-func (volume *Volume) ApplyEffect(p []byte) {
+func (volume *Volume) ApplyEffect(p []byte, bytesRead int) {
 
 	// If the effect isn't active, then we can return early.
 	if !volume.active {
@@ -118,10 +60,13 @@ func (volume *Volume) ApplyEffect(p []byte) {
 	perc *= volume.normalization
 
 	// Make an audio buffer for easy stream manipulation.
-	audio := AudioBuffer(p)
+	audio := resound.AudioBuffer(p)
 
 	// Loop through all frames in the stream that are available to be read.
-	for i := 0; i < audio.Len(); i++ {
+
+	// We use bytesRead / 4 here because the size of the byte buffer can be larger
+	// than the amount of bytes actually read, whoops
+	for i := 0; i < bytesRead/4; i++ {
 
 		// Get the audio value:
 		l, r := audio.Get(i)
@@ -176,6 +121,7 @@ func (volume *Volume) Strength() float64 {
 	return volume.strength
 }
 
+// SetSource sets the active source for the effect.
 func (volume *Volume) SetSource(source io.ReadSeeker) {
 	volume.Source = source
 }
@@ -196,8 +142,8 @@ func (volume *Volume) SetSource(source io.ReadSeeker) {
 // 	return volume
 // }
 
-// // Clone clones the effect, returning an IEffect.
-// func (loop *Loop) Clone() IEffect {
+// // Clone clones the effect, returning an resound.IEffect.
+// func (loop *Loop) Clone() resound.IEffect {
 // 	return &Loop{
 // 		loopCount:       loop.loopCount,
 // 		activeLoopIndex: loop.activeLoopIndex,
@@ -262,8 +208,8 @@ func NewPan(source io.ReadSeeker) *Pan {
 
 }
 
-// Clone clones the effect, returning an IEffect.
-func (pan *Pan) Clone() IEffect {
+// Clone clones the effect, returning an resound.IEffect.
+func (pan *Pan) Clone() resound.IEffect {
 	return &Pan{
 		strength: pan.strength,
 		active:   pan.active,
@@ -273,18 +219,16 @@ func (pan *Pan) Clone() IEffect {
 
 func (pan *Pan) Read(p []byte) (n int, err error) {
 
-	_, err = pan.Source.Read(p)
-	if err != nil {
-		return 0, err
+	if n, err = pan.Source.Read(p); err != nil {
+		return
 	}
 
-	pan.ApplyEffect(p)
+	pan.ApplyEffect(p, n)
 
-	return len(p), nil
-
+	return
 }
 
-func (pan *Pan) ApplyEffect(p []byte) {
+func (pan *Pan) ApplyEffect(p []byte, bytesRead int) {
 
 	if !pan.active {
 		return
@@ -304,9 +248,9 @@ func (pan *Pan) ApplyEffect(p []byte) {
 	ls := math.Min(pan.strength*-1+1, 1)
 	rs := math.Min(pan.strength+1, 1)
 
-	audio := AudioBuffer(p)
+	audio := resound.AudioBuffer(p)
 
-	for i := 0; i < audio.Len(); i++ {
+	for i := 0; i < bytesRead/4; i++ {
 
 		l, r := audio.Get(i)
 
@@ -354,6 +298,7 @@ func (pan *Pan) Pan() float64 {
 	return pan.strength
 }
 
+// SetSource sets the active source for the effect.
 func (pan *Pan) SetSource(source io.ReadSeeker) {
 	pan.Source = source
 }
@@ -386,7 +331,7 @@ func NewDelay(source io.ReadSeeker) *Delay {
 }
 
 // Clone creates a clone of the Delay effect.
-func (delay *Delay) Clone() IEffect {
+func (delay *Delay) Clone() resound.IEffect {
 	return &Delay{
 		wait:         delay.wait,
 		strength:     delay.strength,
@@ -399,24 +344,22 @@ func (delay *Delay) Clone() IEffect {
 
 func (delay *Delay) Read(p []byte) (n int, err error) {
 
-	_, err = delay.Source.Read(p)
-	if err != nil {
-		return 0, err
+	if n, err = delay.Source.Read(p); err != nil {
+		return
 	}
 
-	delay.ApplyEffect(p)
+	delay.ApplyEffect(p, n)
 
-	return len(p), nil
-
+	return
 }
 
-func (delay *Delay) ApplyEffect(p []byte) {
+func (delay *Delay) ApplyEffect(p []byte, bytesRead int) {
 
 	sampleRate := audio.CurrentContext().SampleRate()
 
-	audio := AudioBuffer(p)
+	audio := resound.AudioBuffer(p)
 
-	for i := 0; i < audio.Len(); i++ {
+	for i := 0; i < bytesRead/4; i++ {
 
 		l, r := audio.Get(i)
 
@@ -511,15 +454,16 @@ func (delay *Delay) FeedbackLoop() bool {
 	return delay.feedbackLoop
 }
 
+// SetSource sets the active source for the effect.
 func (delay *Delay) SetSource(source io.ReadSeeker) {
 	delay.Source = source
 }
 
 // Distort distorts the stream that plays through it, clipping the signal.
 type Distort struct {
-	Source   io.ReadSeeker
-	strength float64
-	active   bool
+	Source          io.ReadSeeker
+	crushPercentage float64
+	active          bool
 }
 
 // NewDistort creates a new Distort effect. source is the source stream to
@@ -529,52 +473,50 @@ type Distort struct {
 func NewDistort(source io.ReadSeeker) *Distort {
 
 	return &Distort{
-		Source:   source,
-		strength: 0,
-		active:   true,
+		Source:          source,
+		crushPercentage: 0,
+		active:          true,
 	}
 
 }
 
-// Clone clones the effect, returning an IEffect.
-func (distort *Distort) Clone() IEffect {
+// Clone clones the effect, returning an resound.IEffect.
+func (distort *Distort) Clone() resound.IEffect {
 	return &Distort{
-		strength: distort.strength,
-		Source:   distort.Source,
-		active:   distort.active,
+		crushPercentage: distort.crushPercentage,
+		Source:          distort.Source,
+		active:          distort.active,
 	}
 }
 
 func (distort *Distort) Read(p []byte) (n int, err error) {
 
-	_, err = distort.Source.Read(p)
-	if err != nil {
-		return 0, err
-	}
-
-	distort.ApplyEffect(p)
-
-	return len(p), nil
-
-}
-
-func (distort *Distort) ApplyEffect(p []byte) {
-
-	if !distort.active || distort.strength <= 0 {
+	if n, err = distort.Source.Read(p); err != nil {
 		return
 	}
 
-	audio := AudioBuffer(p)
+	distort.ApplyEffect(p, n)
 
-	for i := 0; i < audio.Len(); i++ {
+	return
+}
+
+func (distort *Distort) ApplyEffect(p []byte, bytesRead int) {
+
+	if !distort.active || distort.crushPercentage <= 0 {
+		return
+	}
+
+	audio := resound.AudioBuffer(p)
+
+	for i := 0; i < bytesRead/4; i++ {
 
 		l, r := audio.Get(i)
 
-		if math.Abs(l) < distort.strength {
+		if math.Abs(l) < distort.crushPercentage {
 			l = math.Round(l)
 		}
 
-		if math.Abs(r) < distort.strength {
+		if math.Abs(r) < distort.crushPercentage {
 			r = math.Round(r)
 		}
 
@@ -602,18 +544,21 @@ func (distort *Distort) Active() bool {
 	return distort.active
 }
 
-// Strength returns the strength of the Distort effect.
-func (distort *Distort) Strength() float64 {
-	return distort.strength
+// CrushPercentage returns the crush percentage of the Distort effect.
+func (distort *Distort) CrushPercentage() float64 {
+	return distort.crushPercentage
 }
 
-// SetStrength sets the overall strength of the Distort effect. 0 is the minimum value.
-func (distort *Distort) SetStrength(strength float64) *Distort {
+// SetCrushPercentage sets the overall crush percentage of the Distort effect.
+// Any value below this in percentage amplitude is rounded off.
+// 0 is the minimum value.
+func (distort *Distort) SetCrushPercentage(strength float64) *Distort {
 	strength = clamp(strength, 0, 1)
-	distort.strength = strength
+	distort.crushPercentage = strength
 	return distort
 }
 
+// SetSource sets the active source for the effect.
 func (distort *Distort) SetSource(source io.ReadSeeker) {
 	distort.Source = source
 }
@@ -639,8 +584,8 @@ func NewLowpassFilter(source io.ReadSeeker) *LowpassFilter {
 
 }
 
-// Clone clones the effect, returning an IEffect.
-func (lpf *LowpassFilter) Clone() IEffect {
+// Clone clones the effect, returning an resound.IEffect.
+func (lpf *LowpassFilter) Clone() resound.IEffect {
 	return &LowpassFilter{
 		strength: lpf.strength,
 		Source:   lpf.Source,
@@ -650,27 +595,26 @@ func (lpf *LowpassFilter) Clone() IEffect {
 
 func (lpf *LowpassFilter) Read(p []byte) (n int, err error) {
 
-	_, err = lpf.Source.Read(p)
-	if err != nil {
-		return 0, err
+	if n, err = lpf.Source.Read(p); err != nil {
+		return
 	}
 
-	lpf.ApplyEffect(p)
+	lpf.ApplyEffect(p, n)
 
-	return len(p), nil
+	return
 
 }
 
-func (lpf *LowpassFilter) ApplyEffect(p []byte) {
+func (lpf *LowpassFilter) ApplyEffect(p []byte, bytesRead int) {
 
 	if !lpf.active {
 		return
 	}
 
 	alpha := math.Sin(lpf.strength * math.Pi / 2)
-	audio := AudioBuffer(p)
+	audio := resound.AudioBuffer(p)
 
-	for i := 0; i < audio.Len(); i++ {
+	for i := 0; i < bytesRead/4; i++ {
 
 		l, r := audio.Get(i)
 
@@ -714,6 +658,7 @@ func (lpf *LowpassFilter) SetStrength(strength float64) *LowpassFilter {
 	return lpf
 }
 
+// SetSource sets the active source for the effect.
 func (lpf *LowpassFilter) SetSource(source io.ReadSeeker) {
 	lpf.Source = source
 }
@@ -730,12 +675,12 @@ type Bitcrush struct {
 // If you add this effect to a DSPChannel, there's no need to pass a source, as
 // it will take effect for whatever streams are played through the DSPChannel.
 func NewBitcrush(source io.ReadSeeker) *Bitcrush {
-	bitcrush := &Bitcrush{Source: source, active: true, strength: 1}
+	bitcrush := &Bitcrush{Source: source, active: true, strength: 0.1}
 	return bitcrush
 }
 
-// Clone clones the effect, returning an IEffect.
-func (bitcrush *Bitcrush) Clone() IEffect {
+// Clone clones the effect, returning an resound.IEffect.
+func (bitcrush *Bitcrush) Clone() resound.IEffect {
 	return &Bitcrush{
 		strength: bitcrush.strength,
 		active:   bitcrush.active,
@@ -745,36 +690,37 @@ func (bitcrush *Bitcrush) Clone() IEffect {
 
 func (bitcrush *Bitcrush) Read(p []byte) (n int, err error) {
 
-	_, err = bitcrush.Source.Read(p)
-	if err != nil {
-		return 0, err
+	if n, err = bitcrush.Source.Read(p); err != nil {
+		return
 	}
 
-	bitcrush.ApplyEffect(p)
+	bitcrush.ApplyEffect(p, n)
 
-	return len(p), nil
+	return
 }
 
-func (bitcrush *Bitcrush) ApplyEffect(p []byte) {
+func (bitcrush *Bitcrush) ApplyEffect(p []byte, bytesRead int) {
 
 	if !bitcrush.active || bitcrush.strength == 0 {
 		return
 	}
 
-	audio := AudioBuffer(p)
+	audio := resound.AudioBuffer(p)
 
 	s := ease.InExpo(float32(bitcrush.strength), 0, 1, 1)
 
 	str := float64(s) * 1000
 
+	bufferSize := bytesRead / 4
+
 	// str := (bitcrush.strength) * 1000
 
-	for i := 0; i < audio.Len(); i++ {
+	for i := 0; i < bufferSize; i++ {
 
 		ri := int(math.Round(float64(i)/str) * str)
 
-		if ri >= audio.Len() {
-			ri = audio.Len() - 1
+		if ri >= bufferSize {
+			ri = bufferSize - 1
 		}
 
 		l, r := audio.Get(ri)
@@ -813,6 +759,7 @@ func (bitcrush *Bitcrush) SetStrength(bitcrushFactor float64) *Bitcrush {
 	return bitcrush
 }
 
+// SetSource sets the active source for the effect.
 func (bitcrush *Bitcrush) SetSource(source io.ReadSeeker) {
 	bitcrush.Source = source
 }
@@ -837,7 +784,7 @@ func (bitcrush *Bitcrush) SetSource(source io.ReadSeeker) {
 
 // }
 
-// func (reverb *Reverb) Clone() IEffect {
+// func (reverb *Reverb) Clone() resound.IEffect {
 // 	return &Reverb{
 // 		FeedbackLoop: reverb.FeedbackLoop,
 // 		Source:       reverb.Source,
@@ -913,3 +860,12 @@ func (bitcrush *Bitcrush) SetSource(source io.ReadSeeker) {
 // func (reverb *Reverb) Active() bool {
 // 	return reverb.active
 // }
+
+func clamp(v, min, max float64) float64 {
+	if v > max {
+		return max
+	} else if v < min {
+		return min
+	}
+	return v
+}
