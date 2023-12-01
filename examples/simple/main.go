@@ -47,7 +47,7 @@ func NewGame() *Game {
 
 	// Create a delay effect for the audio stream.
 	game := &Game{
-		Delay: effects.NewDelay(loop).SetStrength(0.75),
+		Delay: effects.NewDelay(loop).SetStrength(0.75).SetWait(0.1).SetFeedback(0.5),
 	}
 
 	// Create a player to play the sound with the effect.

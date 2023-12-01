@@ -305,10 +305,10 @@ func (pan *Pan) SetSource(source io.ReadSeeker) {
 
 // Delay is an effect that adds a delay to the sound.
 type Delay struct {
-	wait         float64
-	strength     float64
-	feedbackLoop bool
-	Source       io.ReadSeeker
+	wait     float64
+	strength float64
+	feedback float64
+	Source   io.ReadSeeker
 
 	active bool
 	buffer [][2]float64
@@ -320,12 +320,12 @@ type Delay struct {
 func NewDelay(source io.ReadSeeker) *Delay {
 
 	return &Delay{
-		Source:       source,
-		wait:         0.1,
-		strength:     0.75,
-		feedbackLoop: false,
-		buffer:       [][2]float64{},
-		active:       true,
+		Source:   source,
+		wait:     0.1,
+		strength: 1.0,
+		feedback: 0.5,
+		buffer:   [][2]float64{},
+		active:   true,
 	}
 
 }
@@ -333,12 +333,11 @@ func NewDelay(source io.ReadSeeker) *Delay {
 // Clone creates a clone of the Delay effect.
 func (delay *Delay) Clone() resound.IEffect {
 	return &Delay{
-		wait:         delay.wait,
-		strength:     delay.strength,
-		feedbackLoop: delay.feedbackLoop,
-		Source:       delay.Source,
-
-		active: delay.active,
+		wait:     delay.wait,
+		strength: delay.strength,
+		Source:   delay.Source,
+		feedback: delay.feedback,
+		active:   delay.active,
 	}
 }
 
@@ -363,24 +362,21 @@ func (delay *Delay) ApplyEffect(p []byte, bytesRead int) {
 
 		l, r := audio.Get(i)
 
-		if delay.feedbackLoop {
+		bl := l
+		br := r
 
-			if len(delay.buffer) > 0 {
+		if len(delay.buffer) > 0 {
 
-				l += delay.buffer[0][0] * delay.strength
-				r += delay.buffer[0][1] * delay.strength
-
-			}
-
-			delay.buffer = append(delay.buffer, [2]float64{l, r})
-
-		} else {
-
-			delay.buffer = append(delay.buffer, [2]float64{l, r})
-			l += delay.buffer[0][0] * delay.strength
-			r += delay.buffer[0][1] * delay.strength
+			bl += delay.buffer[0][0] * delay.feedback
+			br += delay.buffer[0][1] * delay.feedback
+			// l = bl
+			// r = br
+			l = mix(l, bl, delay.strength)
+			r = mix(r, br, delay.strength)
 
 		}
+
+		delay.buffer = append(delay.buffer, [2]float64{bl, br})
 
 		// 44100 For example
 		if len(delay.buffer) > int(float64(sampleRate)*delay.wait) {
@@ -443,15 +439,15 @@ func (delay *Delay) Strength() float64 {
 	return delay.strength
 }
 
-// SetFeedbackLoop sets the feedback loop of the delay. If set to on, the delay's results feed back into itself.
-func (delay *Delay) SetFeedbackLoop(on bool) *Delay {
-	delay.feedbackLoop = on
+// SetFeedback sets the feedback percentage of the delay. Each echo's volume is modulated by this percentage.
+func (delay *Delay) SetFeedback(feedbackPercentage float64) *Delay {
+	delay.feedback = clamp(feedbackPercentage, 0, 1)
 	return delay
 }
 
-// FeedbackLoop returns if the delay's results feed back into itself or not.
-func (delay *Delay) FeedbackLoop() bool {
-	return delay.feedbackLoop
+// Feedback returns the feedback percentage of the delay.
+func (delay *Delay) Feedback() float64 {
+	return delay.feedback
 }
 
 // SetSource sets the active source for the effect.
@@ -868,4 +864,8 @@ func clamp(v, min, max float64) float64 {
 		return min
 	}
 	return v
+}
+
+func mix(v1, v2, perc float64) float64 {
+	return v1 + ((v2 - v1) * perc)
 }

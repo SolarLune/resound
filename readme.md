@@ -115,6 +115,7 @@ func main() {
 - [ ] Global Stop - Tracking playing sounds to globally stop all sounds that are playing back
 - [ ] DSPChannel Stop - ^, but for a DSP channel
 - [x] Volume normalization - done through the AudioProperties struct.
+- [ ] Replace all usage of "strength" with "wet/dry".
 
 ### Effects
 

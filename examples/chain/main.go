@@ -45,7 +45,7 @@ func NewGame() *Game {
 	// to make it simpler, as otherwise, it's more difficult to reorder effects.
 
 	sfx := resound.ChainEffects(
-		effects.NewDelay(loop).SetWait(0.15).SetStrength(0.75).SetFeedbackLoop(true),
+		effects.NewDelay(loop).SetWait(0.15).SetStrength(0.75).SetFeedback(0.8),
 		effects.NewPan(nil).SetPan(0.75),
 		effects.NewLowpassFilter(nil).SetStrength(0.9),
 	)
