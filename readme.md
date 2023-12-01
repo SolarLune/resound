@@ -38,7 +38,7 @@ func main() {
 	loop := audio.NewInfiniteLoop(stream, stream.Length())
 
     // But here, we'll create a Delay effect and apply it.
-    delay := resound.NewDelay(loop).SetWait(0.1).SetStrength(0.2)
+    delay := effects.NewDelay(loop).SetWait(0.1).SetStrength(0.2)
 
     // Effects in Resound wrap streams (including other effects), so you can just use them
     // like you would an ordinary audio stream in Ebitengine.
@@ -46,7 +46,7 @@ func main() {
     // You can also easily chain effects by using resound.ChainEffects().
 
     // Now we create a new player of the loop + delay:
-	player, err := audio.NewPlayer(context, delay)
+	player, err := context.NewPlayer(delay)
 
 	if err != nil {
 		panic(err)
@@ -75,14 +75,14 @@ func main() {
 
     // So first, we'll create an audio context, decode some bytes into a stream,
     // create a loop, etc. 
-    context := audio.NewContext(sampleRate)
+    audio.NewContext(sampleRate)
 
     reader := bytes.NewReader(soundBytes)
 
     stream, err := vorbis.DecodeWithSampleRate(sampleRate, reader)
 
     if err != nil {
-	panic(err)
+	    panic(err)
     }
 
     loop := audio.NewInfiniteLoop(stream, stream.Length())
@@ -92,10 +92,10 @@ func main() {
     // the stream takes on the effects applied to the DSPChannel. We don't have to
     // pass a stream to effects when used with a DSPChannel, because every stream
     // played through the channel takes the effect.
-    dsp = resound.NewDSPChannel(context)
-    dsp.AddEffect("delay", NewDelay(nil).SetWait(0.1).SetStrength(0.25))
-    dsp.AddEffect("distort", NewDistort(nil).SetStrength(0.25))
-    dsp.AddEffect("volume", NewVolume(nil).SetStrength(0.25))
+    dsp = resound.NewDSPChannel()
+    dsp.AddEffect("delay", effects.NewDelay(nil).SetWait(0.1).SetStrength(0.25))
+    dsp.AddEffect("distort", effects.NewDistort(nil).SetStrength(0.25))
+    dsp.AddEffect("volume", effects.NewVolume(nil).SetStrength(0.25))
 
     // Now we create a new player from the DSP channel. This will return a
     // *resound.ChannelPlayback object, which works similarly to an audio.Player
