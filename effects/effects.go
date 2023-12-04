@@ -89,8 +89,9 @@ func (volume *Volume) Seek(offset int64, whence int) (int64, error) {
 }
 
 // SetActive sets the effect to be active.
-func (volume *Volume) SetActive(active bool) {
+func (volume *Volume) SetActive(active bool) *Volume {
 	volume.active = active
+	return volume
 }
 
 // Active returns if the effect is active.
@@ -928,8 +929,9 @@ func (p *PitchShift) Seek(offset int64, whence int) (int64, error) {
 }
 
 // SetActive sets the effect to be active.
-func (p *PitchShift) SetActive(active bool) {
+func (p *PitchShift) SetActive(active bool) *PitchShift {
 	p.active = active
+	return p
 }
 
 // Active returns if the effect is active.
