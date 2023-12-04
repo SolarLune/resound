@@ -29,13 +29,13 @@ func main() {
 
     reader := bytes.NewReader(soundBytes)
 
-	stream, err := vorbis.DecodeWithSampleRate(sampleRate, reader)
+    stream, err := vorbis.DecodeWithSampleRate(sampleRate, reader)
 
-	if err != nil {
-		panic(err)
-	}
+    if err != nil {
+        panic(err)
+    }
 
-	loop := audio.NewInfiniteLoop(stream, stream.Length())
+    loop := audio.NewInfiniteLoop(stream, stream.Length())
 
     // But here, we'll create a Delay effect and apply it.
     delay := effects.NewDelay(loop).SetWait(0.1).SetStrength(0.2)
@@ -46,14 +46,17 @@ func main() {
     // You can also easily chain effects by using resound.ChainEffects().
 
     // Now we create a new player of the loop + delay:
-	player, err := context.NewPlayer(delay)
+    player, err := context.NewPlayer(delay)
 
-	if err != nil {
-		panic(err)
-	}
+    // Note that if you're going to change effect parameters in real time, you may want to lower the internal buffer size for Players using (*audio.Player).SetBufferSize()
+
+    if err != nil {
+        panic(err)
+    }
 
     // Play it, and you're good to go.
-	player.Play()
+    player.Play()
+
 
 }
 
@@ -82,7 +85,7 @@ func main() {
     stream, err := vorbis.DecodeWithSampleRate(sampleRate, reader)
 
     if err != nil {
-	    panic(err)
+        panic(err)
     }
 
     loop := audio.NewInfiniteLoop(stream, stream.Length())
@@ -104,7 +107,7 @@ func main() {
 
     // Play it, and you're good to go, again - this time, it will run its playback
     // through the effect stack in the DSPChannel, in this case Delay > Distort > Volume.
-	player.Play()
+    player.Play()
 
 }
 
@@ -115,6 +118,7 @@ func main() {
 - [ ] Global Stop - Tracking playing sounds to globally stop all sounds that are playing back
 - [ ] DSPChannel Stop - ^, but for a DSP channel
 - [x] Volume normalization - done through the AudioProperties struct.
+- [ ] Beat / rhythm analysis?
 - [ ] Replace all usage of "strength" with "wet/dry".
 
 ### Effects
