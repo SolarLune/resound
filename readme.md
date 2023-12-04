@@ -129,7 +129,8 @@ func main() {
 - [ ] Reverb
 - [ ] Mix / Fade (between two streams, or between a stream and silence, and over a customizeable time)
 - [ ] Loop (like, looping a signal after so much time has passed or the signal ends)
-- [ ] Pitch shifting (playback using effectively a lower / higher sample rate?)
+- [x] Pitch shifting
+- [ ] Playback speed adjustment
 - [ ] 3D Sound (quick and easy panning and volume adjustment based on distance from listener to source)
 
 ### Generators

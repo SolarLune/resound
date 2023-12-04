@@ -64,15 +64,16 @@ func (ab AudioBuffer) String() string {
 
 // ChainEffects chains multiple effects for you automatically, returning the last chained effect.
 // Example:
-// sfxChain := resound.Chain(
+// sfxChain := resound.Chain(sourceSound,
 //
-//	resound.NewDelay(sourceSound).SetWait(0.2).SetStrength(0.5),
+//	resound.NewDelay(nil).SetWait(0.2).SetStrength(0.5),
 //	resound.NewPan(nil),
 //	resound.NewVolume(nil),
 //
 // )
 // sfxChain at the end would be the Volume effect, which is being fed by the Pan effect, which is fed by the Delay effect.
-func ChainEffects(effects ...IEffect) IEffect {
+func ChainEffects(source io.ReadSeeker, effects ...IEffect) IEffect {
+	effects[0].SetSource(source)
 	for i := 1; i < len(effects); i++ {
 		effects[i].SetSource(effects[i-1])
 	}

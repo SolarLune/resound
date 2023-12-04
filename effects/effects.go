@@ -760,6 +760,221 @@ func (bitcrush *Bitcrush) SetSource(source io.ReadSeeker) {
 	bitcrush.Source = source
 }
 
+type circularBuffer struct {
+	buffer     [][2]float64
+	maxSize    int
+	readIndex  float64
+	writeIndex int
+}
+
+func newCircularBuffer(maxSize int) circularBuffer {
+	return circularBuffer{
+		maxSize: maxSize,
+		buffer:  make([][2]float64, maxSize),
+	}
+}
+
+func (c *circularBuffer) write(l, r float64) {
+
+	c.buffer[c.writeIndex][0] = l
+	c.buffer[c.writeIndex][1] = r
+	c.writeIndex++
+
+	if c.writeIndex >= c.maxSize {
+		c.writeIndex = 0
+	}
+
+}
+
+// readWriteDistance returns the distance between the write index and read index; note that this is the
+// shortest distance.
+func (c circularBuffer) readWriteDistance() float64 {
+	r := c.readIndex
+	w := float64(c.writeIndex)
+	m := float64(c.maxSize)
+	distance := math.Abs(r - w)
+	if distance > m/2 {
+		return math.Min(math.Abs(m-r)+w, math.Abs(m-w)+r)
+	}
+	return distance
+}
+
+func (c *circularBuffer) incrementRead(value float64) {
+	c.readIndex += value
+	bufSize := float64(len(c.buffer))
+	if c.readIndex >= bufSize {
+		c.readIndex -= bufSize
+	}
+}
+
+func (c circularBuffer) read(offset int) (l, r float64) {
+	if !c.BufferFull() {
+		return 0, 0
+	}
+	readIndex := int(c.readIndex) + offset
+	if readIndex >= c.maxSize {
+		readIndex -= c.maxSize
+	}
+	return c.buffer[readIndex][0], c.buffer[readIndex][1]
+}
+
+func (c circularBuffer) BufferFull() bool {
+	return len(c.buffer) == c.maxSize
+}
+
+// PitchShift is an effect that changes the pitch of the incoming audio stream.
+type PitchShift struct {
+	strength float64
+	pitch    float64
+	active   bool
+	Source   io.ReadSeeker
+
+	pitchBuffer circularBuffer
+}
+
+// −12log2(t1/t2) = how many semitones
+
+// NewPitchShift creates a new PitchShift effect. source is the source stream to apply this effect to.
+// If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
+// streams are played through the DSPChannel.
+func NewPitchShift(source io.ReadSeeker, bufferSize int) *PitchShift {
+	pitchShift := &PitchShift{
+		Source:      source,
+		strength:    1,
+		active:      true,
+		pitch:       1,
+		pitchBuffer: newCircularBuffer(bufferSize),
+	}
+	return pitchShift
+}
+
+// Clone clones the effect, returning an resound.IEffect.
+func (p *PitchShift) Clone() resound.IEffect {
+	return &PitchShift{
+		strength: p.strength,
+		pitch:    p.pitch,
+		active:   p.active,
+		Source:   p.Source,
+	}
+}
+
+func (p *PitchShift) Read(byteSlice []byte) (n int, err error) {
+
+	if n, err = p.Source.Read(byteSlice); err != nil {
+		return
+	}
+
+	p.ApplyEffect(byteSlice, n)
+
+	return
+}
+
+func (p *PitchShift) ApplyEffect(byteSlice []byte, bytesRead int) {
+
+	// If the effect isn't active, then we can return early.
+	if !p.active {
+		return
+	}
+
+	audio := resound.AudioBuffer(byteSlice)
+	bufferLength := bytesRead / 4
+
+	for i := 0; i < bufferLength; i++ {
+		// Get the audio value:
+		l, r := audio.Get(i)
+
+		// Write the unaltered audio to the pitch buffer.
+		p.pitchBuffer.write(l, r)
+
+		// Reading from the buffer slower or faster than 1 per frame will give us a pitched result.
+		pitchedL, pitchedR := p.pitchBuffer.read(0)
+
+		// After we do this, we could just increment the read index by pitch (so higher pitch values increment
+		// faster and lower values slower, giving higher pitch and lower pitch), but this alone would give
+		// a crackling sound.
+
+		// To keep from having crackling audio (which can happen when the buffer reads old values
+		// or when the write head passes the read head), we will read the audio from the circular pitch buffer
+		// twice and then mix the result. We read once where the read index is, and once from the opposite side.
+
+		// By cross-fading between these two points based on the distance between the read and
+		// write indices, we can avoid crackling.
+
+		// For more information, see the following (extremely) helpful sites:
+		// https://en.wikipedia.org/wiki/Circular_buffer
+		// https://schaumont.dyn.wpi.edu/ece4703b22/lab5x.html
+		// https://people.ece.cornell.edu/land/courses/ece5760/FinalProjects/s2017/jmt329_swc63_gzm3/jmt329_swc63_gzm3/PitchShifter/index.html
+
+		pitchedL2, pitchedR2 := p.pitchBuffer.read(p.pitchBuffer.maxSize / 2)
+		cross := p.pitchBuffer.readWriteDistance() / float64(p.pitchBuffer.maxSize/2)
+		cross2 := 1 - cross
+
+		fl := pitchedL*cross + pitchedL2*cross2
+		fr := pitchedR*cross + pitchedR2*cross2
+
+		audio.Set(i, mix(l, fl, p.strength), mix(r, fr, p.strength))
+
+		p.pitchBuffer.incrementRead(p.pitch)
+
+	}
+
+}
+
+func (p *PitchShift) Seek(offset int64, whence int) (int64, error) {
+	if p.Source == nil {
+		return 0, nil
+	}
+	return p.Source.Seek(offset, whence)
+}
+
+// SetActive sets the effect to be active.
+func (p *PitchShift) SetActive(active bool) {
+	p.active = active
+}
+
+// Active returns if the effect is active.
+func (p *PitchShift) Active() bool {
+	return p.active
+}
+
+// SetStrength sets the strength of the PitchShift effect to the specified percentage.
+// The lowest possible value is 0.0, with 1.0 being the maximum and taking a 100% effect.
+func (p *PitchShift) SetStrength(strength float64) *PitchShift {
+	if strength < 0 {
+		strength = 0
+	}
+	if strength > 1 {
+		strength = 1
+	}
+	p.strength = strength
+	return p
+}
+
+// Strength returns the strength of the PitchShift effect as a percentage. The value ranges from 0 to 1.
+func (p *PitchShift) Strength() float64 {
+	return p.strength
+}
+
+// SetSource sets the active source for the effect.
+func (p *PitchShift) SetSource(source io.ReadSeeker) {
+	p.Source = source
+}
+
+// SetPitch sets the target pitch of the PitchShift effect to the specified percentage.
+// The lowest possible value is 0.0, with 1.0 being 100% pitch.
+func (p *PitchShift) SetPitch(pitchFactor float64) *PitchShift {
+	if pitchFactor < 0 {
+		pitchFactor = 0
+	}
+	p.pitch = pitchFactor
+	return p
+}
+
+// Pitch returns the pitch of the PitchShift effect as a percentage.
+func (p *PitchShift) Pitch() float64 {
+	return p.pitch
+}
+
 // type Reverb struct {
 // 	FeedbackLoop bool
 // 	Source       io.ReadSeeker
