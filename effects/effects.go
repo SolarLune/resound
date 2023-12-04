@@ -560,6 +560,7 @@ func (distort *Distort) SetSource(source io.ReadSeeker) {
 	distort.Source = source
 }
 
+// LowpassFilter represents a low-pass filter for a source audio stream.
 type LowpassFilter struct {
 	Source    io.ReadSeeker
 	active    bool
@@ -611,6 +612,7 @@ func (lpf *LowpassFilter) ApplyEffect(p []byte, bytesRead int) {
 	alpha := math.Sin(lpf.strength * math.Pi / 2)
 	audio := resound.AudioBuffer(p)
 
+	// TODO: Make low-pass / high-pass filters better quality.
 	for i := 0; i < bytesRead/4; i++ {
 
 		l, r := audio.Get(i)
@@ -658,6 +660,113 @@ func (lpf *LowpassFilter) SetStrength(strength float64) *LowpassFilter {
 // SetSource sets the active source for the effect.
 func (lpf *LowpassFilter) SetSource(source io.ReadSeeker) {
 	lpf.Source = source
+}
+
+// HighpassFilter represents a highpass filter for an audio stream.
+type HighpassFilter struct {
+	Source   io.ReadSeeker
+	active   bool
+	prev     [2]float64
+	strength float64
+}
+
+// NewHighpassFilter creates a new high-pass filter for the given source stream.
+// If you add this effect to a DSPChannel, there's no need to pass a source, as
+// it will take effect for whatever streams are played through the DSPChannel.
+func NewHighpassFilter(source io.ReadSeeker) *HighpassFilter {
+
+	return &HighpassFilter{
+		Source:   source,
+		strength: 0.8,
+		active:   true,
+	}
+
+}
+
+// Clone clones the effect, returning an resound.IEffect.
+func (h *HighpassFilter) Clone() resound.IEffect {
+	return &HighpassFilter{
+		strength: h.strength,
+		Source:   h.Source,
+		active:   h.active,
+	}
+}
+
+func (h *HighpassFilter) Read(p []byte) (n int, err error) {
+
+	if n, err = h.Source.Read(p); err != nil {
+		return
+	}
+
+	h.ApplyEffect(p, n)
+
+	return
+
+}
+
+func (h *HighpassFilter) ApplyEffect(p []byte, bytesRead int) {
+
+	if !h.active {
+		return
+	}
+
+	alpha := math.Sin(h.strength * math.Pi / 2)
+	audio := resound.AudioBuffer(p)
+
+	for i := 0; i < bytesRead/4; i++ {
+
+		l, r := audio.Get(i)
+
+		nl := (1-alpha)*l + ((l - h.prev[0]) * alpha)
+		nr := (1-alpha)*r + ((r - h.prev[1]) * alpha)
+
+		// l = (1-alpha)*l + (h.prev[0] * alpha)
+		// r = (1-alpha)*r + (h.prev[1] * alpha)
+
+		// fmt.Println(l, r, h.prev)
+
+		audio.Set(i, nl, nr)
+
+		h.prev[0] = l
+		h.prev[1] = r
+
+	}
+
+}
+
+func (h *HighpassFilter) Seek(offset int64, whence int) (int64, error) {
+	if h.Source == nil {
+		return 0, nil
+	}
+	return h.Source.Seek(offset, whence)
+}
+
+// SetActive sets the effect to be active.
+func (h *HighpassFilter) SetActive(active bool) *HighpassFilter {
+	h.active = active
+	return h
+}
+
+// Active returns if the effect is active.
+func (h *HighpassFilter) Active() bool {
+	return h.active
+}
+
+// SetStrength sets the strength of the HighpassFilter.
+// The values are clamped from 0 to 1 (100%).
+func (h *HighpassFilter) SetStrength(strength float64) *HighpassFilter {
+	h.strength = clamp(strength, 0, 1)
+	return h
+}
+
+// Strength returns the strength of the HighpassFilter.
+func (h *HighpassFilter) Strength() float64 {
+	return h.strength
+}
+
+// SetSource sets the active source for the effect.
+func (h *HighpassFilter) SetSource(source io.ReadSeeker) {
+	h.Source = source
 }
 
 // Bitcrush is an effect that changes the pitch of the incoming audio byte stream.
