@@ -77,7 +77,10 @@ func (game *Game) Play(name string, sample []byte) {
 		// Here we analyze the stream, using a chunk size for scanning the audio file.
 		// The longer the file and the more variance in the file, the higher the fidelity should be.
 		// If the stream has been analyzed already, then this will simply return the results.
-		prop := game.AudioProperties.Get(name).Analyze(stream, 16)
+		prop, err := game.AudioProperties.Get(name).Analyze(stream, 16)
+		if err != nil {
+			panic(err)
+		}
 		volume.SetNormalizationFactor(prop.Normalization)
 	}
 

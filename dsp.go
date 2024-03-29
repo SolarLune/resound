@@ -33,7 +33,7 @@ func newChannelPlayback(sourceStream io.ReadSeeker, channel *DSPChannel) *DSPPla
 
 }
 
-// Clone duplicates the DSPPlayer; note that the current playback values will not be cloned.
+// Clone duplicates the DSPPlayer.
 func (es *DSPPlayer) Clone() *DSPPlayer {
 	newES := newChannelPlayback(es.Source, es.Channel)
 	return newES

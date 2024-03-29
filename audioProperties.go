@@ -31,27 +31,36 @@ var byteSlice = make([]byte, 512)
 // the results should be, but the longer the scan would take.
 // A scanCount of 16 means it samples the stream 16 times evenly throughout the file.
 // If a scanCount of 0 is provided, it will default to 16.
-func (ap *AudioProperty) Analyze(stream io.ReadSeeker, scanCount int64) AnalysisResult {
+func (ap *AudioProperty) Analyze(stream io.ReadSeeker, scanCount int64) (AnalysisResult, error) {
 
 	if scanCount <= 0 {
 		scanCount = 16
 	}
 
 	if ap.analyzed {
-		return ap.result
+		return ap.result, nil
 	}
 
 	largest := 0.0
 
-	// Get the length of the stream by seeking to the end; we can't seek using io.SeekEnd because it has no end, apparently
-	length, _ := stream.Seek(math.MaxInt64, io.SeekStart)
+	// Get the length of the stream normally
+	length, err := stream.Seek(0, io.SeekEnd)
+
+	// If there's an error, try getting the length of the stream by seeking to the end; we can't seek using io.SeekEnd for infinite loops
+	if err != nil {
+		length, err = stream.Seek(math.MaxInt64, io.SeekStart)
+
+		// If there's still an error, return the error.
+		if err != nil {
+			return AnalysisResult{}, err
+		}
+
+	}
 
 	// Seek back afterwards as necessary
 	stream.Seek(0, io.SeekStart)
 
 	seekJump := length / int64(scanCount)
-
-	var err error
 
 	pos := int64(0)
 
@@ -88,15 +97,20 @@ func (ap *AudioProperty) Analyze(stream io.ReadSeeker, scanCount int64) Analysis
 
 		pos += seekJump
 
-		_, err := stream.Seek(seekJump, io.SeekCurrent)
+		_, err = stream.Seek(seekJump, io.SeekCurrent)
 
 		if err != nil {
-			break
+			return AnalysisResult{}, err
 		}
 
 	}
 
-	stream.Seek(0, io.SeekStart)
+	// Seek back to the beginning
+	_, err = stream.Seek(0, io.SeekStart)
+
+	if err != nil {
+		return AnalysisResult{}, err
+	}
 
 	ap.result = AnalysisResult{
 		Normalization: 1.0 / largest,
@@ -104,7 +118,7 @@ func (ap *AudioProperty) Analyze(stream io.ReadSeeker, scanCount int64) Analysis
 
 	ap.analyzed = true
 
-	return ap.result
+	return ap.result, nil
 
 }
 

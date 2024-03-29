@@ -193,9 +193,9 @@ func (volume *Volume) SetSource(source io.ReadSeeker) {
 
 // Pan is a panning effect, handling panning the sound between the left and right channels.
 type Pan struct {
-	strength float64
-	active   bool
-	Source   io.ReadSeeker
+	pan    float64
+	active bool
+	Source io.ReadSeeker
 }
 
 // NewPan creates a new Pan effect. source is the source stream to apply the
@@ -212,9 +212,9 @@ func NewPan(source io.ReadSeeker) *Pan {
 // Clone clones the effect, returning an resound.IEffect.
 func (pan *Pan) Clone() resound.IEffect {
 	return &Pan{
-		strength: pan.strength,
-		active:   pan.active,
-		Source:   pan.Source,
+		pan:    pan.pan,
+		active: pan.active,
+		Source: pan.Source,
 	}
 }
 
@@ -235,10 +235,10 @@ func (pan *Pan) ApplyEffect(p []byte, bytesRead int) {
 		return
 	}
 
-	if pan.strength < -1 {
-		pan.strength = -1
-	} else if pan.strength > 1 {
-		pan.strength = 1
+	if pan.pan < -1 {
+		pan.pan = -1
+	} else if pan.pan > 1 {
+		pan.pan = 1
 	}
 
 	// This implementation uses a linear scale, ranging from -1 to 1, for stereo or mono sounds.
@@ -246,8 +246,8 @@ func (pan *Pan) ApplyEffect(p []byte, bytesRead int) {
 	// When pan is -1.0, only the left channel of the stereo sound is audible, when pan is 1.0,
 	// only the right channel of the stereo sound is audible.
 	// https://docs.unity3d.com/ScriptReference/AudioSource-panStereo.html
-	ls := math.Min(pan.strength*-1+1, 1)
-	rs := math.Min(pan.strength+1, 1)
+	ls := math.Min(pan.pan*-1+1, 1)
+	rs := math.Min(pan.pan+1, 1)
 
 	audio := resound.AudioBuffer(p)
 
@@ -290,13 +290,13 @@ func (pan *Pan) SetPan(panPercent float64) *Pan {
 	} else if panPercent < -1 {
 		panPercent = -1
 	}
-	pan.strength = panPercent
+	pan.pan = panPercent
 	return pan
 }
 
 // Pan returns the panning value for the pan effect in a percentage, ranging from -1 (hard left) to 1 (hard right).
 func (pan *Pan) Pan() float64 {
-	return pan.strength
+	return pan.pan
 }
 
 // SetSource sets the active source for the effect.
@@ -944,7 +944,10 @@ type PitchShift struct {
 
 // −12log2(t1/t2) = how many semitones
 
-// NewPitchShift creates a new PitchShift effect. source is the source stream to apply this effect to.
+// NewPitchShift creates a new PitchShift effect.
+// source is the source stream to apply this effect to and bufferSize is the size of the buffer the pitch shift effect operates on.
+// The larger the buffer, the smoother it will sound, but the more echoing there will be as the effect runs through the buffer.
+// A buffer size of 1024, 2048, or 4096 are good starting points.
 // If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
 // streams are played through the DSPChannel.
 func NewPitchShift(source io.ReadSeeker, bufferSize int) *PitchShift {
