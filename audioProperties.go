@@ -30,11 +30,11 @@ var byteSlice = make([]byte, 512)
 // the function should scan various parts of the audio stream. The higher the scan count, the more accurate
 // the results should be, but the longer the scan would take.
 // A scanCount of 16 means it samples the stream 16 times evenly throughout the file.
-// If a scanCount of 0 is provided, it will default to 16.
+// If a scanCount of 0 or less is provided, it will default to 64.
 func (ap *AudioProperty) Analyze(stream io.ReadSeeker, scanCount int64) (AnalysisResult, error) {
 
 	if scanCount <= 0 {
-		scanCount = 16
+		scanCount = 64
 	}
 
 	if ap.analyzed {
@@ -127,18 +127,19 @@ func (ap *AudioProperty) ResetAnalyzation() {
 	ap.result = AnalysisResult{}
 }
 
-type AudioProperties map[string]*AudioProperty
+type AudioProperties map[any]*AudioProperty
 
 func NewAudioProperties() AudioProperties {
 	return AudioProperties{}
 }
 
-func (ap AudioProperties) Get(name string) *AudioProperty {
+// Get gets the audio property associated with some identifier. This could be, for example, the original filepath of the audio stream.
+func (ap AudioProperties) Get(id any) *AudioProperty {
 
-	if _, exists := ap[name]; !exists {
-		ap[name] = newAudioProperty()
+	if _, exists := ap[id]; !exists {
+		ap[id] = newAudioProperty()
 	}
 
-	return ap[name]
+	return ap[id]
 
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"image/color"
 	"time"
@@ -33,6 +32,9 @@ var stepData []byte
 
 const sampleRate = 44100
 
+// While setting effects manually works fine, it can be a bit awkward for larger amounts of effects and dynamically altering them.
+// It's easier to use DSPChannels and apply Effects directly to DSPPlayers for this.
+
 func NewGame() *Game {
 
 	// We create a new audio context using the provided sample rate.
@@ -43,12 +45,12 @@ func NewGame() *Game {
 		DSP: resound.NewDSPChannel(),
 	}
 
-	// Now we add effects; we don't have to specify a stream because a DSPChannel applies them
+	// Now we add effects; we don't have to specify a source because a DSPChannel applies effects
 	// to all streams played through the channel.
 
-	game.DSP.Add("delay", effects.NewDelay(nil).SetWait(0.1).SetStrength(0.9))
-	game.DSP.Add("pan", effects.NewPan(nil))
-	game.DSP.Add("volume", effects.NewVolume(nil))
+	game.DSP.AddEffect("delay", effects.NewDelay().SetWait(0.1).SetStrength(0.9))
+	game.DSP.AddEffect("pan", effects.NewPan())
+	game.DSP.AddEffect("volume", effects.NewVolume())
 
 	reader := bytes.NewReader(songData)
 
@@ -61,13 +63,17 @@ func NewGame() *Game {
 	loop := audio.NewInfiniteLoop(stream, stream.Length())
 
 	// I want to make the music quieter, so I'll actually add a volume
-	// effect in the middle of this
+	// effect here - I'll apply the effect directly to the player, to make it simpler.
+	player, err := resound.NewPlayer(loop)
+	if err != nil {
+		panic(err)
+	}
+	player.AddEffect("volume", effects.NewVolume().SetStrength(0.4))
 
-	volume := effects.NewVolume(loop).SetStrength(0.6)
-
-	player := game.DSP.CreatePlayer(volume)
-	player.SetBufferSize(time.Millisecond * 50)
+	// We set the DSP channel so the sound player takes on the effects set on the DSP channe.
+	player.SetDSPChannel(game.DSP)
 	player.Play()
+	player.SetBufferSize(time.Millisecond * 50)
 
 	return game
 }
@@ -111,14 +117,18 @@ func (game *Game) Update() error {
 			panic(err)
 		}
 
-		game.DSP.CreatePlayer(stream).Play()
+		player, err := resound.NewPlayer(stream)
+		if err != nil {
+			panic(err)
+		}
+		player.SetDSPChannel(game.DSP).Play()
 
 	}
 
 	game.Time += 1.0 / 60.0
 
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
-		returnCode = errors.New("quit")
+		returnCode = ebiten.Termination
 	}
 
 	return returnCode
@@ -137,7 +147,10 @@ In this example, left and right arrow keys
 alter the pan. Up and down alters the
 volume. Press space to play a footstep
 sound through the channel. Notice that
-it shares the properties as the music.
+it shares the properties as the music
+because they're both played on the same
+DSP Channel and the effects are applied
+to the channel.
 
 Pan level: %.2f
 Volume level: %.2f`, pan.Pan(), volume.Strength()), basicfont.Face7x13, 16, 16, color.White)

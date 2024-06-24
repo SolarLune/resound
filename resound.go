@@ -11,7 +11,6 @@ import (
 type IEffect interface {
 	io.ReadSeeker
 	ApplyEffect(data []byte, bytesRead int) // This function is called when sound data goes through an effect. The effect should modify the data byte buffer.
-	SetSource(io.ReadSeeker)                // This function allows an effect's source to be dynamically altered; this allows for easy chaining with resound.ChainEffects().
 }
 
 // AudioBuffer wraps a []byte of audio data and provides handy functions to get
@@ -19,6 +18,7 @@ type IEffect interface {
 type AudioBuffer []byte
 
 func (ab AudioBuffer) Len() int {
+	// We divide by 4 because it's L16 PCM audio at 2 channels, with int16s composing 2 bytes per sample, per channel (2 bytes * 2 channels = 4).
 	return len(ab) / 4
 }
 
@@ -60,22 +60,4 @@ func (ab AudioBuffer) String() string {
 	}
 	s += " }"
 	return s
-}
-
-// ChainEffects chains multiple effects for you automatically, returning the last chained effect.
-// Example:
-// sfxChain := resound.Chain(sourceSound,
-//
-//	resound.NewDelay(nil).SetWait(0.2).SetStrength(0.5),
-//	resound.NewPan(nil),
-//	resound.NewVolume(nil),
-//
-// )
-// sfxChain at the end would be the Volume effect, which is being fed by the Pan effect, which is fed by the Delay effect.
-func ChainEffects(source io.ReadSeeker, effects ...IEffect) IEffect {
-	effects[0].SetSource(source)
-	for i := 1; i < len(effects); i++ {
-		effects[i].SetSource(effects[i-1])
-	}
-	return effects[len(effects)-1]
 }

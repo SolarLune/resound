@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"image/color"
 
 	_ "embed"
@@ -71,13 +70,14 @@ func (game *Game) Play(name string, sample []byte) {
 		panic(err)
 	}
 
-	volume := effects.NewVolume(stream)
+	volume := effects.NewVolume().SetSource(stream)
 
 	if game.Normalize {
-		// Here we analyze the stream, using a chunk size for scanning the audio file.
+		// Here we analyze the stream, using a scan count number for how many times to sample the audio file.
 		// The longer the file and the more variance in the file, the higher the fidelity should be.
 		// If the stream has been analyzed already, then this will simply return the results.
-		prop, err := game.AudioProperties.Get(name).Analyze(stream, 16)
+		// If the scan count is less than or equal to 0, it will default to a sane scan count for accuracy.
+		prop, err := game.AudioProperties.Get(name).Analyze(stream, 0)
 		if err != nil {
 			panic(err)
 		}
@@ -118,7 +118,7 @@ func (game *Game) Update() error {
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
-		returnCode = errors.New("quit")
+		returnCode = ebiten.Termination
 	}
 
 	return returnCode

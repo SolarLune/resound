@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"image/color"
 	"time"
@@ -19,7 +18,6 @@ import (
 )
 
 type Game struct {
-	Delay      *effects.Delay
 	PitchShift *effects.PitchShift
 	Time       float64
 }
@@ -45,7 +43,7 @@ func NewGame() *Game {
 
 	game := &Game{
 		// Create a pitch shift effect with the given pitch buffer size.
-		PitchShift: effects.NewPitchShift(loop, 1024).SetPitch(0.8),
+		PitchShift: effects.NewPitchShift(1024).SetSource(loop).SetPitch(0.8),
 	}
 
 	player, err := context.NewPlayer(game.PitchShift)
@@ -84,7 +82,7 @@ func (game *Game) Update() error {
 	game.Time += 1.0 / 60.0
 
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
-		err = errors.New("quit")
+		err = ebiten.Termination
 	}
 
 	return err

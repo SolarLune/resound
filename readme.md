@@ -10,9 +10,9 @@ The general advantages of using Resound is two-fold. Firstly, it allows you to e
 
 ## How do I use it?
 
-There's a couple of different ways.
+There's a couple of different ways to use resound.
 
-1) Create effects and play an audio stream through them. The effects themselves satisfy `io.ReadSeeker`, like an ordinary audio stream from Ebitengine, so you can chain them together.
+1) Effects themselves satisfy `io.ReadSeeker`, like an ordinary audio stream from Ebitengine, so you can create a player from them using Ebiten's built-in `context.NewPlayer()` functionality. However, it's easier to create a `resound.Player`, as it has support for applying Effects directly onto the player:
 
 ```go
 
@@ -37,18 +37,18 @@ func main() {
 
     loop := audio.NewInfiniteLoop(stream, stream.Length())
 
-    // But here, we'll create a Delay effect and apply it.
-    delay := effects.NewDelay(loop).SetWait(0.1).SetStrength(0.2)
+    delay := effects.NewDelay().SetWait(0.1).SetStrength(0.2)
 
-    // Effects in Resound wrap streams (including other effects), so you can just use them
+    player := resound.NewPlayer(loop)
+
+    // Effects in Resound wrap streams (including other effects), so you could just use them
     // like you would an ordinary audio stream in Ebitengine.
 
-    // You can also easily chain effects by using resound.ChainEffects().
-
-    // Now we create a new player of the loop + delay:
+    // Now we create a new player of the original loop + delay:
     player, err := context.NewPlayer(delay)
 
-    // Note that if you're going to change effect parameters in real time, you may want to lower the internal buffer size for Players using (*audio.Player).SetBufferSize()
+    // (Note that if you're going to change effect parameters in real time, you may want to
+    // lower the internal buffer size for Players using (*audio.Player).SetBufferSize())
 
     if err != nil {
         panic(err)
@@ -61,6 +61,8 @@ func main() {
 }
 
 ```
+
+2) You can also apply effects to a Player.
 
 2) Apply effects to a DSP Channel, and then play sounds through there. This allows you to automatically play sounds back using various shared properties (a shared volume, shared panning, shared filter, etc).
 
@@ -147,3 +149,4 @@ func main() {
 # Known Issues
 
 - Currently, effects directly apply on top of streams, which means that any effects that could make streams longer (like reverbs or delays) will get cut off if the source stream ends.
+- All effect parameters are ordinary values (floats, bools, etc), but since they're accessible through user-facing functions as well as used within the effect's Read() function, this creates a race condition, particularly for fading a Volume effect. This should probably be properly synchronized in some way.

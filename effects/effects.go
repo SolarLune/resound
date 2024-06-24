@@ -15,116 +15,193 @@ type Volume struct {
 	normalization float64
 	active        bool
 	Source        io.ReadSeeker
+
+	fadeStart  float64
+	fadeChange float64
+	fadeTime   float64
+	fade       float64
 }
 
 // NewVolume creates a new Volume effect. source is the source stream to apply this effect to.
-// If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
-// streams are played through the DSPChannel.
-func NewVolume(source io.ReadSeeker) *Volume {
-	volume := &Volume{Source: source, strength: 1, active: true, normalization: 1}
+// You'll need to manually set the source if you want to play the effect manually as a Player's source, rather than by adding it as an effect to the Player.
+func NewVolume() *Volume {
+	volume := &Volume{strength: 1, active: true, normalization: 1, fadeTime: -1}
 	return volume
 }
 
 // Clone clones the effect, returning an resound.IEffect.
-func (volume *Volume) Clone() resound.IEffect {
+func (v *Volume) Clone() resound.IEffect {
 	return &Volume{
-		strength: volume.strength,
-		active:   volume.active,
-		Source:   volume.Source,
+		strength:      v.strength,
+		active:        v.active,
+		Source:        v.Source,
+		normalization: v.normalization,
+		fadeStart:     v.fadeStart,
+		fadeChange:    v.fadeChange,
+		fadeTime:      v.fadeTime,
+		fade:          v.fade,
 	}
 }
 
-func (volume *Volume) Read(p []byte) (n int, err error) {
+func (v *Volume) Read(p []byte) (n int, err error) {
 
-	if n, err = volume.Source.Read(p); err != nil {
+	if n, err = v.Source.Read(p); err != nil {
 		return
 	}
 
-	volume.ApplyEffect(p, n)
+	v.ApplyEffect(p, n)
 
 	return
 }
 
-func (volume *Volume) ApplyEffect(p []byte, bytesRead int) {
+func (v *Volume) ApplyEffect(p []byte, bytesRead int) {
 
 	// If the effect isn't active, then we can return early.
-	if !volume.active {
+	if !v.active {
 		return
 	}
 
-	perc := volume.strength
-	if volume.strength <= 1 {
-		perc = float64(ease.InSine(float32(volume.strength), 0, 1, 1))
+	perc := v.strength
+	if v.strength <= 1 {
+		perc = float64(ease.InSine(float32(v.strength), 0, 1, 1))
 	}
 
-	perc *= volume.normalization
+	perc *= v.normalization
 
-	// Make an audio buffer for easy stream manipulation.
-	audio := resound.AudioBuffer(p)
+	// Make an audioBuffer buffer for easy stream manipulation.
+	audioBuffer := resound.AudioBuffer(p)
 
 	// Loop through all frames in the stream that are available to be read.
 
-	// We use bytesRead / 4 here because the size of the byte buffer can be larger
-	// than the amount of bytes actually read, whoops
+	sampleRate := audio.CurrentContext().SampleRate()
+
+	brf := float64(bytesRead / 4)
+	time := brf / float64(sampleRate)
+	fadeFactor := 1.0
+
+	// We use bytesRead / 4 here because it's PCM audio
+	// Also, the size of the byte buffer can be larger than the amount of bytes actually read from the buffer.
 	for i := 0; i < bytesRead/4; i++ {
 
 		// Get the audio value:
-		l, r := audio.Get(i)
+		l, r := audioBuffer.Get(i)
+
+		if v.fadeTime >= 0 {
+			if v.fade < v.fadeTime {
+				v.fade += time / brf
+				fadeFactor = float64(ease.Linear(float32(v.fade), float32(v.fadeStart), float32(v.fadeChange), float32(v.fadeTime)))
+			} else {
+				fadeFactor = v.fadeStart + v.fadeChange
+			}
+		}
 
 		// Multiply it by the volume strength:
-		l *= perc
-		r *= perc
+		l *= perc * fadeFactor
+		r *= perc * fadeFactor
 
 		// Set it back, and you're done.
-		audio.Set(i, l, r)
+		audioBuffer.Set(i, l, r)
 	}
 
 }
 
-func (volume *Volume) Seek(offset int64, whence int) (int64, error) {
-	if volume.Source == nil {
+func (v *Volume) Seek(offset int64, whence int) (int64, error) {
+	if v.Source == nil {
 		return 0, nil
 	}
-	return volume.Source.Seek(offset, whence)
+	return v.Source.Seek(offset, whence)
 }
 
 // SetActive sets the effect to be active.
-func (volume *Volume) SetActive(active bool) *Volume {
-	volume.active = active
-	return volume
+func (v *Volume) SetActive(active bool) *Volume {
+	v.active = active
+	return v
 }
 
 // Active returns if the effect is active.
-func (volume *Volume) Active() bool {
-	return volume.active
+func (v *Volume) Active() bool {
+	return v.active
 }
 
 // SetNormalizationFactor sets the normalization factor for the Volume effect.
 // This should be obtained from an AudioProperties Analysis.
-func (volume *Volume) SetNormalizationFactor(normalization float64) {
-	volume.normalization = normalization
+func (v *Volume) SetNormalizationFactor(normalization float64) {
+	v.normalization = normalization
 }
 
 // SetStrength sets the strength of the Volume effect to the specified percentage.
 // The lowest possible value is 0.0, with 1.0 taking a 100% effect.
 // The volume is altered on a sine-based easing curve.
 // At over 100% volume, the sound is clipped as necessary.
-func (volume *Volume) SetStrength(strength float64) *Volume {
+func (v *Volume) SetStrength(strength float64) *Volume {
 	if strength < 0 {
 		strength = 0
 	}
-	volume.strength = strength
-	return volume
+	v.strength = strength
+	return v
 }
 
 // Strength returns the strength of the Volume effect as a percentage.
-func (volume *Volume) Strength() float64 {
-	return volume.strength
+func (v *Volume) Strength() float64 {
+	return v.strength
 }
 
-// SetSource sets the active source for the effect.
-func (volume *Volume) SetSource(source io.ReadSeeker) {
+// StartFade starts a fade going from the provided start volume to the ending volume (in a 0 to 1 range),
+// ranging over the given amount of time in seconds.
+// If startVolume is less than 0, it will be set to the current starting volume.
+func (v *Volume) StartFade(startVolume, endVolume, fadeDuration float64) *Volume {
+	startVolume = clamp(startVolume, 0, 1)
+	endVolume = clamp(endVolume, 0, 1)
+	v.fadeChange = endVolume - startVolume
+	v.fadeStart = startVolume
+	v.fadeTime = fadeDuration
+	v.fade = 0
+	return v
+}
+
+// StopFade stops a fade in progress.
+func (v *Volume) StopFade() *Volume {
+	v.fadeChange = -1
+	v.fadeStart = -1
+	v.fadeTime = -1
+	v.fade = -1
+	return v
+}
+
+// // FadePercentage returns the percentage of the way through a fade the Volume effect is.
+// // Note that because Ebitengine's audio works with buffers, this is fundamentally inaccurate the larger the audio buffer.
+// // If no fade is active, the function returns -1.
+// func (v *Volume) FadePercentage() float64 {
+// 	if v.fadeTime < 0 {
+// 		return -1
+// 	}
+// 	return float64(ease.Linear(float32(v.fade), float32(v.fadeStart), float32(v.fadeChange), float32(v.fadeTime)))
+// }
+
+// // FadeEnd returns the ending volume of the Volume effect's current fade.
+// // Note that because Ebitengine's audio works with buffers, this is fundamentally inaccurate the larger the audio buffer.
+// // If no fade is active, the function returns -1.
+// func (v *Volume) FadeStart() float64 {
+// 	if v.fadeTime < 0 {
+// 		return -1
+// 	}
+// 	return v.fadeStart
+// }
+
+// // FadeEnd returns the ending volume of the Volume effect's current fade.
+// // Note that because Ebitengine's audio works with buffers, this is fundamentally inaccurate the larger the audio buffer.
+// // If no fade is active, the function returns -1.
+// func (v *Volume) FadeEnd() float64 {
+// 	if v.fadeTime < 0 {
+// 		return -1
+// 	}
+// 	return v.fadeStart + v.fadeChange
+// }
+
+// SetSource explicitly sets the active source for the effect - this is needed if you play an Effect manually, rather than through its Player or the Player's DSPChannel.
+func (volume *Volume) SetSource(source io.ReadSeeker) *Volume {
 	volume.Source = source
+	return volume
 }
 
 // // Loop is an effect that loops an incoming audio byte stream.
@@ -198,15 +275,11 @@ type Pan struct {
 	Source io.ReadSeeker
 }
 
-// NewPan creates a new Pan effect. source is the source stream to apply the
-// effect on. Panning defaults to 0.
-// If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
-// streams are played through the DSPChannel.
-func NewPan(source io.ReadSeeker) *Pan {
-
-	pan := &Pan{Source: source, active: true}
+// NewPan creates a new Pan effect. Panning defaults to 0 (the middle).
+// You'll need to manually set the source if you want to play the effect manually as a Player's source, rather than by adding it as an effect to the Player.
+func NewPan() *Pan {
+	pan := &Pan{active: true}
 	return pan
-
 }
 
 // Clone clones the effect, returning an resound.IEffect.
@@ -300,8 +373,9 @@ func (pan *Pan) Pan() float64 {
 }
 
 // SetSource sets the active source for the effect.
-func (pan *Pan) SetSource(source io.ReadSeeker) {
+func (pan *Pan) SetSource(source io.ReadSeeker) *Pan {
 	pan.Source = source
+	return pan
 }
 
 // Delay is an effect that adds a delay to the sound.
@@ -316,12 +390,10 @@ type Delay struct {
 }
 
 // NewDelay creates a new Delay effect.
-// If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
-// streams are played through the DSPChannel.
-func NewDelay(source io.ReadSeeker) *Delay {
+// You'll need to manually set the source if you want to play the effect manually as a Player's source, rather than by adding it as an effect to the Player.
+func NewDelay() *Delay {
 
 	return &Delay{
-		Source:   source,
 		wait:     0.1,
 		strength: 1.0,
 		feedback: 0.5,
@@ -452,8 +524,9 @@ func (delay *Delay) Feedback() float64 {
 }
 
 // SetSource sets the active source for the effect.
-func (delay *Delay) SetSource(source io.ReadSeeker) {
+func (delay *Delay) SetSource(source io.ReadSeeker) *Delay {
 	delay.Source = source
+	return delay
 }
 
 // Distort distorts the stream that plays through it, clipping the signal.
@@ -463,18 +536,13 @@ type Distort struct {
 	active          bool
 }
 
-// NewDistort creates a new Distort effect. source is the source stream to
-// apply the effect to.
-// If you add this effect to a DSPChannel, you can pass nil as the source, as
-// it will take effect for whatever streams are played through the DSPChannel.
-func NewDistort(source io.ReadSeeker) *Distort {
-
+// NewDistort creates a new Distort effect.
+// You'll need to manually set the source if you want to play the effect manually as a Player's source, rather than by adding it as an effect to the Player.
+func NewDistort() *Distort {
 	return &Distort{
-		Source:          source,
 		crushPercentage: 0,
 		active:          true,
 	}
-
 }
 
 // Clone clones the effect, returning an resound.IEffect.
@@ -556,8 +624,9 @@ func (distort *Distort) SetCrushPercentage(strength float64) *Distort {
 }
 
 // SetSource sets the active source for the effect.
-func (distort *Distort) SetSource(source io.ReadSeeker) {
+func (distort *Distort) SetSource(source io.ReadSeeker) *Distort {
 	distort.Source = source
+	return distort
 }
 
 // LowpassFilter represents a low-pass filter for a source audio stream.
@@ -570,12 +639,10 @@ type LowpassFilter struct {
 }
 
 // NewLowpassFilter creates a new low-pass filter for the given source stream.
-// If you add this effect to a DSPChannel, there's no need to pass a source, as
-// it will take effect for whatever streams are played through the DSPChannel.
-func NewLowpassFilter(source io.ReadSeeker) *LowpassFilter {
+// You'll need to manually set the source if you want to play the effect manually as a Player's source, rather than by adding it as an effect to the Player.
+func NewLowpassFilter() *LowpassFilter {
 
 	return &LowpassFilter{
-		Source:   source,
 		strength: 0.5,
 		active:   true,
 	}
@@ -658,8 +725,9 @@ func (lpf *LowpassFilter) SetStrength(strength float64) *LowpassFilter {
 }
 
 // SetSource sets the active source for the effect.
-func (lpf *LowpassFilter) SetSource(source io.ReadSeeker) {
+func (lpf *LowpassFilter) SetSource(source io.ReadSeeker) *LowpassFilter {
 	lpf.Source = source
+	return lpf
 }
 
 // HighpassFilter represents a highpass filter for an audio stream.
@@ -671,12 +739,10 @@ type HighpassFilter struct {
 }
 
 // NewHighpassFilter creates a new high-pass filter for the given source stream.
-// If you add this effect to a DSPChannel, there's no need to pass a source, as
-// it will take effect for whatever streams are played through the DSPChannel.
-func NewHighpassFilter(source io.ReadSeeker) *HighpassFilter {
+// You'll need to manually set the source if you want to play the effect manually as a Player's source, rather than by adding it as an effect to the Player.
+func NewHighpassFilter() *HighpassFilter {
 
 	return &HighpassFilter{
-		Source:   source,
 		strength: 0.8,
 		active:   true,
 	}
@@ -765,8 +831,9 @@ func (h *HighpassFilter) Strength() float64 {
 }
 
 // SetSource sets the active source for the effect.
-func (h *HighpassFilter) SetSource(source io.ReadSeeker) {
+func (h *HighpassFilter) SetSource(source io.ReadSeeker) *HighpassFilter {
 	h.Source = source
+	return h
 }
 
 // Bitcrush is an effect that changes the pitch of the incoming audio byte stream.
@@ -777,11 +844,9 @@ type Bitcrush struct {
 }
 
 // NewBitcrush creates a new Bitcrush effect.
-// source is the source stream to apply this effect to.
-// If you add this effect to a DSPChannel, there's no need to pass a source, as
-// it will take effect for whatever streams are played through the DSPChannel.
-func NewBitcrush(source io.ReadSeeker) *Bitcrush {
-	bitcrush := &Bitcrush{Source: source, active: true, strength: 0.1}
+// You'll need to manually set the source if you want to play the effect manually as a Player's source, rather than by adding it as an effect to the Player.
+func NewBitcrush() *Bitcrush {
+	bitcrush := &Bitcrush{active: true, strength: 0.1}
 	return bitcrush
 }
 
@@ -866,8 +931,9 @@ func (bitcrush *Bitcrush) SetStrength(bitcrushFactor float64) *Bitcrush {
 }
 
 // SetSource sets the active source for the effect.
-func (bitcrush *Bitcrush) SetSource(source io.ReadSeeker) {
+func (bitcrush *Bitcrush) SetSource(source io.ReadSeeker) *Bitcrush {
 	bitcrush.Source = source
+	return bitcrush
 }
 
 type circularBuffer struct {
@@ -945,14 +1011,12 @@ type PitchShift struct {
 // −12log2(t1/t2) = how many semitones
 
 // NewPitchShift creates a new PitchShift effect.
-// source is the source stream to apply this effect to and bufferSize is the size of the buffer the pitch shift effect operates on.
+// bufferSize is the size of the buffer the pitch shift effect operates on.
 // The larger the buffer, the smoother it will sound, but the more echoing there will be as the effect runs through the buffer.
 // A buffer size of 1024, 2048, or 4096 are good starting points.
-// If you add this effect to a DSPChannel, source can be nil, as it will take effect for whatever
-// streams are played through the DSPChannel.
-func NewPitchShift(source io.ReadSeeker, bufferSize int) *PitchShift {
+// You'll need to manually set the source if you want to play the effect manually as a Player's source, rather than by adding it as an effect to the Player.
+func NewPitchShift(bufferSize int) *PitchShift {
 	pitchShift := &PitchShift{
-		Source:      source,
 		strength:    1,
 		active:      true,
 		pitch:       1,
@@ -1070,8 +1134,9 @@ func (p *PitchShift) Strength() float64 {
 }
 
 // SetSource sets the active source for the effect.
-func (p *PitchShift) SetSource(source io.ReadSeeker) {
+func (p *PitchShift) SetSource(source io.ReadSeeker) *PitchShift {
 	p.Source = source
+	return p
 }
 
 // SetPitch sets the target pitch of the PitchShift effect to the specified percentage.
