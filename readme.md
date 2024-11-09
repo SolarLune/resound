@@ -133,7 +133,7 @@ func main() {
 - [X] Bitcrush (?)
 - [ ] High-pass Filter
 - [ ] Reverb
-- [ ] Mix / Fade (between two streams, or between a stream and silence, and over a customizeable time)
+- [x] Mix / Fade (between two streams, or between a stream and silence, and over a customizeable time) - Fading is now partially implemented, but not mixing
 - [ ] Loop (like, looping a signal after so much time has passed or the signal ends)
 - [x] Pitch shifting
 - [ ] Playback speed adjustment

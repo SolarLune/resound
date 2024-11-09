@@ -75,11 +75,11 @@ func (v *Volume) ApplyEffect(p []byte, bytesRead int) {
 
 	sampleRate := audio.CurrentContext().SampleRate()
 
+	// We use bytesRead / 4 here because it's PCM audio
 	brf := float64(bytesRead / 4)
 	time := brf / float64(sampleRate)
 	fadeFactor := 1.0
 
-	// We use bytesRead / 4 here because it's PCM audio
 	// Also, the size of the byte buffer can be larger than the amount of bytes actually read from the buffer.
 	for i := 0; i < bytesRead/4; i++ {
 
