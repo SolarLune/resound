@@ -64,7 +64,7 @@ func NewGame() *Game {
 
 	// I want to make the music quieter, so I'll actually add a volume
 	// effect here - I'll apply the effect directly to the player, to make it simpler.
-	player, err := resound.NewPlayer(loop)
+	player, err := resound.NewPlayer("bgm", loop)
 	if err != nil {
 		panic(err)
 	}
@@ -117,7 +117,7 @@ func (game *Game) Update() error {
 			panic(err)
 		}
 
-		player, err := resound.NewPlayer(stream)
+		player, err := resound.NewPlayer("footstep", stream)
 		if err != nil {
 			panic(err)
 		}

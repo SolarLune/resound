@@ -1,21 +1,23 @@
 module github.com/solarlune/resound
 
-go 1.19
+go 1.23.0
+
+toolchain go1.24.3
 
 require (
-	github.com/hajimehoshi/ebiten/v2 v2.6.3
-	github.com/tanema/gween v0.0.0-20221212145351-621cc8a459d1
-	golang.org/x/image v0.14.0
+	github.com/hajimehoshi/ebiten/v2 v2.8.8
+	github.com/tanema/gween v0.0.0-20250522035225-e874ee3ae01a
+	golang.org/x/image v0.28.0
 )
 
 require (
-	github.com/ebitengine/oto/v3 v3.1.0 // indirect
-	github.com/ebitengine/purego v0.5.1 // indirect
-	github.com/jezek/xgb v1.1.0 // indirect
+	github.com/ebitengine/gomobile v0.0.0-20240911145611-4856209ac325 // indirect
+	github.com/ebitengine/hideconsole v1.0.0 // indirect
+	github.com/ebitengine/oto/v3 v3.3.3 // indirect
+	github.com/ebitengine/purego v0.8.4 // indirect
+	github.com/jezek/xgb v1.1.1 // indirect
 	github.com/jfreymuth/oggvorbis v1.0.5 // indirect
 	github.com/jfreymuth/vorbis v1.0.2 // indirect
-	golang.org/x/exp/shiny v0.0.0-20231127185646-65229373498e // indirect
-	golang.org/x/mobile v0.0.0-20231127183840-76ac6878050a // indirect
-	golang.org/x/sync v0.5.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/sync v0.15.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
 )

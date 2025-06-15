@@ -7,6 +7,8 @@ type DSPChannel struct {
 	Effects     map[any]IEffect
 	EffectOrder []IEffect
 	closed      bool
+
+	playingPlayers []*Player
 }
 
 // NewDSPChannel returns a new DSPChannel.
@@ -31,4 +33,47 @@ func (d *DSPChannel) AddEffect(id any, effect IEffect) *DSPChannel {
 	d.Effects[id] = effect
 	d.EffectOrder = append(d.EffectOrder, effect)
 	return d
+}
+
+func (d *DSPChannel) addPlayerToList(p *Player) {
+	p.dspChannel.playingPlayers = append(p.dspChannel.playingPlayers, p)
+}
+
+func (d *DSPChannel) clean() {
+
+	for i := len(d.playingPlayers) - 1; i >= 0; i-- {
+		if !d.playingPlayers[i].IsPlaying() {
+			d.playingPlayers[i] = nil
+			d.playingPlayers = append(d.playingPlayers[:i], d.playingPlayers[i+1:]...)
+			return
+		}
+	}
+
+}
+
+// PlayingPlayers returns a copy of the list of all Players currently playing through the DSPChannel.
+func (d *DSPChannel) PlayingPlayers() []*Player {
+	out := []*Player{}
+	copy(out, d.playingPlayers)
+	return out
+}
+
+// PlayerByID returns a specific Player by its ID.
+func (d *DSPChannel) PlayerByID(id any) *Player {
+	for _, p := range d.playingPlayers {
+		if p.id == id {
+			return p
+		}
+	}
+	return nil
+}
+
+// IsPlayingPlayer returns if a Player with the specified ID is currently playing back.
+func (d *DSPChannel) IsPlayingPlayer(id any) bool {
+	for _, player := range d.playingPlayers {
+		if player.IsPlaying() && player.id == id {
+			return true
+		}
+	}
+	return false
 }

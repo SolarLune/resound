@@ -13,6 +13,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
+	"github.com/solarlune/resound"
 	"github.com/solarlune/resound/effects"
 	"golang.org/x/image/font/basicfont"
 )
@@ -29,24 +30,32 @@ const sampleRate = 44100
 
 func NewGame() *Game {
 
-	context := audio.NewContext(sampleRate)
+	// Create the audio context
+	audio.NewContext(sampleRate)
 
+	// Load the song data
 	reader := bytes.NewReader(songData)
 
+	// Decode
 	stream, err := vorbis.DecodeWithSampleRate(sampleRate, reader)
 
 	if err != nil {
 		panic(err)
 	}
 
+	// Create a loop
 	loop := audio.NewInfiniteLoop(stream, stream.Length())
 
+	// Create a new resound.Player, which is an enhanced audio player similar to
+	// Ebitengine's but you can add effects directly on the player or use it with
+	// a DSP channel (which can have effects on it).
+	player, err := resound.NewPlayer("bgm", loop)
+
+	// Create a pitch shift effect with the given pitch buffer size.
 	game := &Game{
-		// Create a pitch shift effect with the given pitch buffer size.
 		PitchShift: effects.NewPitchShift(1024).SetSource(loop).SetPitch(0.8),
 	}
-
-	player, err := context.NewPlayer(game.PitchShift)
+	player.AddEffect("pitch shift", game.PitchShift)
 
 	if err != nil {
 		panic(err)
