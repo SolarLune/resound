@@ -49,7 +49,7 @@ func NewGame() *Game {
 	game := &Game{}
 
 	// Here, we'll create a new resound.Player to play our audio.
-	player, err := resound.NewPlayer(loop)
+	player, err := resound.NewPlayer("bgm", loop)
 	if err != nil {
 		panic(err)
 	}

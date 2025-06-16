@@ -12,17 +12,19 @@ import (
 // Player's DSPChannel.
 type Player struct {
 	*audio.Player
-	DSPChannel *DSPChannel
+	dspChannel *DSPChannel
 	Source     io.ReadSeeker
+	id         any
 
 	EffectOrder []IEffect
 	Effects     map[any]IEffect
 }
 
-// NewPlayer creates a new Player to playback an io.ReadSeeker-fulfilling audio stream.
-func NewPlayer(sourceStream io.ReadSeeker) (*Player, error) {
+// NewPlayer creates a new Player with a customizeable ID to playback an io.ReadSeeker-fulfilling audio stream.
+func NewPlayer(id any, sourceStream io.ReadSeeker) (*Player, error) {
 
 	cp := &Player{
+		id:      id,
 		Source:  sourceStream,
 		Effects: map[any]IEffect{},
 	}
@@ -51,6 +53,11 @@ func NewPlayerFromPlayer(player *audio.Player) *Player {
 
 }
 
+// ID returns the ID associated with the given Player.
+func (p *Player) ID() any {
+	return p.id
+}
+
 // AddEffect adds the specified Effect to the Player, with the given ID.
 func (p *Player) AddEffect(id any, effect IEffect) *Player {
 	p.Effects[id] = effect
@@ -66,8 +73,13 @@ func (p *Player) Effect(id any) IEffect {
 
 // SetDSPChannel sets the DSPChannel to be used for playing audio back through the Player.
 func (p *Player) SetDSPChannel(c *DSPChannel) *Player {
-	p.DSPChannel = c
+	p.dspChannel = c
 	return p
+}
+
+// DSPChannel returns the current DSP channel associated with this Player.
+func (p *Player) DSPChannel() *DSPChannel {
+	return p.dspChannel
 }
 
 // CopyProperties copies the properties (effects, current DSP Channel, etc) from one resound.Player to the other.
@@ -79,7 +91,7 @@ func (p *Player) CopyProperties(other *Player) *Player {
 	}
 	other.EffectOrder = append(other.EffectOrder, p.EffectOrder...)
 
-	other.DSPChannel = p.DSPChannel
+	other.dspChannel = p.dspChannel
 
 	return p
 
@@ -87,11 +99,11 @@ func (p *Player) CopyProperties(other *Player) *Player {
 
 func (p *Player) Read(bytes []byte) (n int, err error) {
 
-	if p.DSPChannel != nil {
+	if p.dspChannel != nil {
 
-		if !p.DSPChannel.Active {
+		if !p.dspChannel.Active {
 			return
-		} else if p.DSPChannel.closed {
+		} else if p.dspChannel.closed {
 			p.Close() // Close player if the DSPChannel it's playing on is also closed
 			p.Source = nil
 			return 0, io.EOF
@@ -99,7 +111,7 @@ func (p *Player) Read(bytes []byte) (n int, err error) {
 
 	}
 
-	if n, err = p.Source.Read(bytes); err != nil {
+	if n, err = p.Source.Read(bytes); err != nil && err != io.EOF {
 		return
 	}
 
@@ -107,8 +119,8 @@ func (p *Player) Read(bytes []byte) (n int, err error) {
 		effect.ApplyEffect(bytes, n)
 	}
 
-	if p.DSPChannel != nil {
-		for _, effect := range p.DSPChannel.EffectOrder {
+	if p.dspChannel != nil {
+		for _, effect := range p.dspChannel.EffectOrder {
 			effect.ApplyEffect(bytes, n)
 		}
 	}
@@ -125,4 +137,12 @@ func (p *Player) Seek(offset int64, whence int) (int64, error) {
 
 	return p.Source.Seek(offset, whence)
 
+}
+
+func (p *Player) Play() {
+	if p.dspChannel != nil {
+		p.dspChannel.clean()
+		p.dspChannel.addPlayerToList(p)
+	}
+	p.Player.Play()
 }
