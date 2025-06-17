@@ -82,8 +82,8 @@ func (game *Game) Update() error {
 
 	var returnCode error
 
-	pan := game.DSP.Effects["pan"].(*effects.Pan)
-	volume := game.DSP.Effects["volume"].(*effects.Volume)
+	pan := game.DSP.Effect("pan").(*effects.Pan)
+	volume := game.DSP.Effect("volume").(*effects.Volume)
 
 	panFactor := pan.Pan()
 
@@ -136,8 +136,8 @@ func (game *Game) Update() error {
 
 func (game *Game) Draw(screen *ebiten.Image) {
 
-	pan := game.DSP.Effects["pan"].(*effects.Pan)
-	volume := game.DSP.Effects["volume"].(*effects.Volume)
+	pan := game.DSP.Effect("pan").(*effects.Pan)
+	volume := game.DSP.Effect("volume").(*effects.Volume)
 	text.Draw(screen, fmt.Sprintf(`This is an example showing how
 DSPChannels work. You create a
 DSPChannel, add effects, and play streams

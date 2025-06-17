@@ -16,8 +16,8 @@ type Player struct {
 	Source     io.ReadSeeker
 	id         any
 
-	EffectOrder []IEffect
-	Effects     map[any]IEffect
+	effectOrder []IEffect
+	effects     map[any]IEffect
 }
 
 // NewPlayer creates a new Player with a customizeable ID to playback an io.ReadSeeker-fulfilling audio stream.
@@ -26,7 +26,7 @@ func NewPlayer(id any, sourceStream io.ReadSeeker) (*Player, error) {
 	cp := &Player{
 		id:      id,
 		Source:  sourceStream,
-		Effects: map[any]IEffect{},
+		effects: map[any]IEffect{},
 	}
 
 	player, err := audio.CurrentContext().NewPlayer(cp)
@@ -46,7 +46,7 @@ func NewPlayerFromPlayer(player *audio.Player) *Player {
 
 	cp := &Player{
 		Player:  player,
-		Effects: map[any]IEffect{},
+		effects: map[any]IEffect{},
 	}
 
 	return cp
@@ -60,15 +60,15 @@ func (p *Player) ID() any {
 
 // AddEffect adds the specified Effect to the Player, with the given ID.
 func (p *Player) AddEffect(id any, effect IEffect) *Player {
-	p.Effects[id] = effect
-	p.EffectOrder = append(p.EffectOrder, effect)
+	p.effects[id] = effect
+	p.effectOrder = append(p.effectOrder, effect)
 	return p
 }
 
 // Effect returns the effect associated with the given id.
 // If an effect with the provided ID doesn't exist, this function will return nil.
 func (p *Player) Effect(id any) IEffect {
-	return p.Effects[id]
+	return p.effects[id]
 }
 
 // SetDSPChannel sets the DSPChannel to be used for playing audio back through the Player.
@@ -86,10 +86,10 @@ func (p *Player) DSPChannel() *DSPChannel {
 // Note that this won't duplicate the current state of playback of the internal audio stream.
 func (p *Player) CopyProperties(other *Player) *Player {
 
-	for k, v := range p.Effects {
-		other.Effects[k] = v
+	for k, v := range p.effects {
+		other.effects[k] = v
 	}
-	other.EffectOrder = append(other.EffectOrder, p.EffectOrder...)
+	other.effectOrder = append(other.effectOrder, p.effectOrder...)
 
 	other.dspChannel = p.dspChannel
 
@@ -115,12 +115,12 @@ func (p *Player) Read(bytes []byte) (n int, err error) {
 		return
 	}
 
-	for _, effect := range p.EffectOrder {
+	for _, effect := range p.effectOrder {
 		effect.ApplyEffect(bytes, n)
 	}
 
 	if p.dspChannel != nil {
-		for _, effect := range p.dspChannel.EffectOrder {
+		for _, effect := range p.dspChannel.effectOrder {
 			effect.ApplyEffect(bytes, n)
 		}
 	}

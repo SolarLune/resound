@@ -105,7 +105,7 @@ func (game *Game) Update() error {
 
 func (game *Game) Draw(screen *ebiten.Image) {
 
-	delay := game.Audio.Effects["delay"].(*effects.Delay)
+	delay := game.Audio.Effect("delay").(*effects.Delay)
 
 	delayOn := "On"
 

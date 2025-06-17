@@ -4,8 +4,8 @@ package resound
 // Any Players that have a DSPChannel set will take on the effects applied to the channel as well.
 type DSPChannel struct {
 	Active      bool
-	Effects     map[any]IEffect
-	EffectOrder []IEffect
+	effects     map[any]IEffect
+	effectOrder []IEffect
 	closed      bool
 
 	playingPlayers []*Player
@@ -15,8 +15,8 @@ type DSPChannel struct {
 func NewDSPChannel() *DSPChannel {
 	dsp := &DSPChannel{
 		Active:      true,
-		Effects:     map[any]IEffect{},
-		EffectOrder: []IEffect{},
+		effects:     map[any]IEffect{},
+		effectOrder: []IEffect{},
 	}
 	return dsp
 }
@@ -30,9 +30,13 @@ func (d *DSPChannel) Close() {
 // AddEffect adds the specified Effect to the DSPChannel under the given identification. Note that effects added to DSPChannels don't need
 // to specify source streams, as the DSPChannel automatically handles this.
 func (d *DSPChannel) AddEffect(id any, effect IEffect) *DSPChannel {
-	d.Effects[id] = effect
-	d.EffectOrder = append(d.EffectOrder, effect)
+	d.effects[id] = effect
+	d.effectOrder = append(d.effectOrder, effect)
 	return d
+}
+
+func (d *DSPChannel) Effect(id any) IEffect {
+	return d.effects[id]
 }
 
 func (d *DSPChannel) addPlayerToList(p *Player) {
